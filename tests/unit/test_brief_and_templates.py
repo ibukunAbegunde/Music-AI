@@ -18,7 +18,7 @@ def test_parse_brief_afrobeats() -> None:
     assert "A" in (b.key or "")
     assert b.autonomy_mode == "collaborative"
     assert b.scratch_or_release == "scratch"
-    assert any(c.trait == "chord_feel" for c in b.borrow_chips)
+    assert any(c.trait == "chords" for c in b.borrow_chips)
     assert len(b.energy_curve) == 8
 
 
