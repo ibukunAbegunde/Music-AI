@@ -1,0 +1,12 @@
+{
+  "fixture_id": "muddy_sub",
+  "description": "Excess sub + kick/bass stack for soften/nudge PatchOps",
+  "peak_dbfs": -3.0,
+  "measured_lufs": -12.0,
+  "clipping_ratio": 0.0,
+  "excess_sub_energy": 0.8,
+  "kick_bass_overlap_ratio": 0.92,
+  "velocity_hot_ratio": 0.05,
+  "silence_ratio": 0.01,
+  "missing_end_fill": true
+}

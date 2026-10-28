@@ -1,4 +1,4 @@
-"""CLI entrypoint: music-ai compose / revise / ref-compose / reference pipeline / ab / …"""
+"""CLI entrypoint: music-ai compose / revise / critique / revise-loop / ref-compose / …"""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ from backend.app.services.revise import revise_project
 from backend.app.storage.assets import AssetStore
 
 app = typer.Typer(
-    help="Private AI Music Producer — Phase 2–3 CLI (references + conditioned MIDI)",
+    help="Private AI Music Producer — Phase 0–4 CLI (refs, conditioned MIDI, critic loop)",
     no_args_is_help=True,
 )
 console = Console()
@@ -598,6 +598,8 @@ def ref_pipeline(
         f"  groove summary: swing≈{gf.swing_estimate} sync≈{gf.syncopation} "
         f"onsets={len(gf.onset_grid)}"
     )
+
+
 @app.command("recipe-apply")
 def recipe_apply(
     recipe_id: str = typer.Argument(...),
@@ -628,6 +630,113 @@ def recipe_apply(
     console.print(f"  recipe_id: {multi.recipe_id}")
     console.print(f"  locks on brief: {multi.brief.locked_roles}")
     _print_candidate_table(multi.candidates)
+
+
+@app.command()
+def critique(
+    project_id: str = typer.Argument(..., help="Existing project UUID"),
+    fixture: str | None = typer.Option(
+        None,
+        help="Optional render metrics fixture id (e.g. hot_clipping, muddy_sub)",
+    ),
+    workspace: Path | None = typer.Option(None),
+) -> None:
+    """Evaluate CIR/render fixtures and emit typed PatchOps (≤3 next moves)."""
+    from backend.app.agents.critic import critique_project
+    from backend.app.services.revise import _load_cir
+
+    settings = _settings(None, workspace)
+    assets = AssetStore(settings)
+    project = _load_cir(assets, UUID(project_id), None)
+    if project is None:
+        raise typer.BadParameter(f"no CIR found for project {project_id}")
+    result = critique_project(project, fixture_id=fixture, max_moves=3)
+    board = result.scoreboard
+    console.print(f"[bold green]Critique[/] {project.id}")
+    if board:
+        console.print(
+            f"  technical={board.technical:.3f} (fails={board.technical_fail_count})  "
+            f"musical={board.musical:.3f} (fails={board.musical_fail_count})"
+        )
+    if result.findings_summary:
+        console.print("[bold]Findings (annotations only):[/]")
+        for f in result.findings_summary:
+            console.print(f"  • {f}")
+    console.print("[bold]Actionable deliverable = typed PatchOps:[/]")
+    _print_moves(result.next_moves)
+    if not result.next_moves:
+        console.print("  (none — mix looks healthy or all roles locked)")
+
+
+@app.command("revise-loop")
+def revise_loop_cmd(
+    project_id: str = typer.Argument(..., help="Existing project UUID"),
+    max_iters: int = typer.Option(3, help="Bounded revision iterations (cap 3 default)"),
+    apply: bool = typer.Option(
+        False,
+        "--apply",
+        help="Apply low-risk PatchOps when measured improvement holds (else suggest-only)",
+    ),
+    fixture: str | None = typer.Option(None, help="Render metrics fixture id"),
+    seed: int | None = typer.Option(None),
+    mode: str | None = typer.Option(None, help="simulation | midi_export"),
+    workspace: Path | None = typer.Option(None),
+) -> None:
+    """Bounded critic loop: evaluate → ≤3 PatchOps → measure → rollback if worse."""
+    from backend.app.services.revision_loop import run_revision_loop
+
+    settings = _settings(mode, workspace)
+    setup_logging(settings.log_level)
+    result = run_revision_loop(
+        UUID(project_id),
+        max_iterations=max_iters,
+        apply_ops=apply,
+        fixture_id=fixture,
+        seed=seed,
+        settings=settings,
+        adapter=_adapter(settings),
+    )
+    console.print(f"[bold green]Revision loop[/] {result.project.id}")
+    console.print(f"  stopped: {result.stopped_reason}")
+    console.print(f"  applied: {result.applied}")
+    console.print(f"  undo verified: {result.undo_verified}")
+    if result.user_confirmation_required:
+        console.print("[yellow]Awaiting confirmation[/] — pass --apply to execute low-risk ops")
+    if result.initial_scoreboard and result.final_scoreboard:
+        b, a = result.initial_scoreboard, result.final_scoreboard
+        console.print(
+            f"  technical {b.technical:.3f}→{a.technical:.3f}  "
+            f"musical {b.musical:.3f}→{a.musical:.3f}"
+        )
+    for it in result.iterations:
+        flag = "✓" if it.accepted else ("↩" if it.rolled_back else "·")
+        console.print(f"  [{flag}] iter {it.index}: {it.reason}")
+        for op in it.ops:
+            console.print(f"      - {op.action_type} → {op.target_role} ({op.verification_status})")
+    if result.version:
+        console.print(f"  version: {result.version.id}")
+        console.print(f"  one-line diff: {result.candidate.one_line_diff if result.candidate else '—'}")
+    _print_moves(result.next_moves)
+
+
+@app.command("restore")
+def restore_cmd(
+    project_id: str = typer.Argument(..., help="Project UUID"),
+    version_id: str = typer.Argument(..., help="Restorable version UUID"),
+    mode: str | None = typer.Option(None),
+    workspace: Path | None = typer.Option(None),
+) -> None:
+    """Restore project CIR tip to a prior version (rollback)."""
+    from backend.app.services.revision_loop import restore_project_version
+
+    settings = _settings(mode, workspace)
+    project = restore_project_version(
+        UUID(project_id),
+        UUID(version_id),
+        settings=settings,
+        adapter=_adapter(settings),
+    )
+    console.print(f"[bold green]Restored[/] {project.id} → version {project.version_id}")
 
 
 @app.command()

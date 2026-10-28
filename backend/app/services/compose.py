@@ -141,7 +141,14 @@ def compose_from_brief(
         candidate.model_dump(mode="json"),
     )
 
-    next_moves = propose_next_moves(project)
+    try:
+        from backend.app.agents.critic import critique_project
+
+        next_moves = critique_project(project, max_moves=3).next_moves or propose_next_moves(
+            project
+        )
+    except Exception:  # noqa: BLE001
+        next_moves = propose_next_moves(project)
     meta = {
         "project_id": str(project.id),
         "version_id": str(version.id),

@@ -1,0 +1,15 @@
+{
+  "fixture_id": "healthy_loop",
+  "description": "Clean simulated bounce — critic should emit few/no fails",
+  "peak_dbfs": -6.0,
+  "measured_lufs": -14.0,
+  "clipping_ratio": 0.0,
+  "silence_ratio": 0.02,
+  "velocity_hot_ratio": 0.02,
+  "excess_sub_energy": 0.15,
+  "stereo_imbalance": 0.05,
+  "kick_bass_overlap_ratio": 0.35,
+  "groove_grid_error": 0.01,
+  "missing_end_fill": false,
+  "note_density_per_bar": 12.0
+}

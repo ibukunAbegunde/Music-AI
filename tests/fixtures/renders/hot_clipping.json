@@ -1,0 +1,13 @@
+{
+  "fixture_id": "hot_clipping",
+  "description": "Simulated bounce with clipping / hot peaks for critic PatchOp tests",
+  "peak_dbfs": 0.2,
+  "true_peak_dbfs": 0.5,
+  "measured_lufs": -8.0,
+  "clipping_ratio": 0.04,
+  "silence_ratio": 0.02,
+  "velocity_hot_ratio": 0.4,
+  "excess_sub_energy": 0.2,
+  "stereo_imbalance": 0.1,
+  "dynamic_range_db": 4.0
+}
