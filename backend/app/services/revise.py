@@ -10,7 +10,7 @@ from uuid import UUID
 from backend.app.agents.critic import propose_next_moves
 from backend.app.core.config import DawMode, Settings, get_settings
 from backend.app.core.logging import log_event, setup_logging
-from backend.app.daw.base import DawAdapter, DawResult
+from backend.app.daw.base import DawAdapter, DawResult, ensure_daw_write_ok
 from backend.app.daw.fake import FakeDawAdapter
 from backend.app.daw.midi_fallback import MidiExportAdapter
 from backend.app.models.db import init_db
@@ -39,8 +39,8 @@ from backend.app.music.coedit import (
     parse_lock_roles_from_text,
 )
 from backend.app.music.diff import diff_projects
-from backend.app.music.generators import generate_from_brief
 from backend.app.music.midi import export_project_midi
+from backend.app.research.midi_specialist import compose_cir_from_brief
 from backend.app.services.compose import select_adapter
 from backend.app.storage.assets import AssetStore
 from backend.app.storage.repository import ProjectRepository
@@ -140,7 +140,9 @@ def revise_project(
         parent_locked = apply_role_locks(parent, locks)
         brief.locked_roles = locks
 
-    regenerated = generate_from_brief(brief, name=parent.name + "-rev")
+    regenerated = compose_cir_from_brief(
+        brief, settings=settings, name=parent.name + "-rev"
+    ).project
     if "soften bass" in lower_instr or "softer bass" in lower_instr:
         for t in regenerated.tracks:
             if t.role.value == "bass":
@@ -183,6 +185,7 @@ def revise_project(
         snapshot_ref = snap.observations.get("snapshot_ref")
 
     daw_result = daw.create_or_update_notes(merged)
+    ensure_daw_write_ok(daw_result, context="revise")
     if isinstance(daw, FakeDawAdapter):
         verify = daw.verify_postcondition({"min_tracks": 3, "min_notes": 5})
         daw_result = verify if not daw_result.verified else daw_result

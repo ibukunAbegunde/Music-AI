@@ -38,7 +38,9 @@ Mode: **simulation-first** — interfaces, honest stubs, eval harnesses. **No** 
 
 - `backend/app/research/` — midi_specialist, action_effect, mix_heuristics, vocal, dual_path, eval_harness, registry
 - `backend/app/daw/registry.py` + `daw/stubs.py`
-- Compose path uses `get_midi_specialist()`; revision loop appends `RevisionOutcome`
+- Shared CIR entry `compose_cir_from_brief()` (specialist hook) used by compose / full / ref-candidates / revise; metadata records `specialist_name` / `specialist_mode`
+- `DAW_MODE=postfader` refuse stub raises `DawWriteError` on compose (not OK+buried failure)
+- Revision loop appends `RevisionOutcome`
 - CLI: `research-status`, `research-eval`, `action-effect-log`, `mix-heuristics`, `vocal-stub`, `list-daws`
 - API: `/api/research/status`, `/api/research/eval`, `/api/projects/{id}/midi-audition`; jobs cancel returns `cancel_stub`
 - UI: Workspace MIDI audition stub; Jobs cancel button + stub labeling

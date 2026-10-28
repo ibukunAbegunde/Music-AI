@@ -125,3 +125,44 @@ def get_midi_specialist(
             "Use deterministic specialist or install a compatible adapter when available."
         )
     return DeterministicMidiSpecialist()
+
+
+def compose_cir_from_brief(
+    brief: BriefDocument,
+    *,
+    settings: Settings | None = None,
+    name: str | None = None,
+    plan: ConditioningPlan | None = None,
+    reference_ids: list | None = None,
+    style_vector: list[float] | None = None,
+    specialist_checkpoint: str | None = None,
+    extra: dict[str, Any] | None = None,
+) -> MidiSpecialistResult:
+    """Shared CIR generation entry used by compose / full / ref / candidates / revise.
+
+    Always goes through ``get_midi_specialist`` so optional specialist config applies
+    on every path, not only ``compose_from_brief``.
+    """
+    specialist = get_midi_specialist(settings)
+    return specialist.compose(
+        MidiSpecialistRequest(
+            brief=brief,
+            name=name,
+            plan=plan,
+            reference_ids=reference_ids,
+            style_vector=style_vector,
+            specialist_checkpoint=specialist_checkpoint,
+            extra=dict(extra or {}),
+        )
+    )
+
+
+def specialist_metadata(result: MidiSpecialistResult) -> dict[str, Any]:
+    """Fields recorded on compose / full-compose metadata for audit."""
+    return {
+        "specialist_name": result.specialist_name,
+        "specialist_mode": result.mode,
+        "specialist_version": result.specialist_version,
+        "specialist_notes": list(result.notes),
+        "cir_is_system_of_record": result.cir_is_system_of_record,
+    }

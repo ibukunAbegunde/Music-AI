@@ -177,6 +177,9 @@ pytest tests/unit/test_phase7_research.py tests/integration/test_phase7_research
 ## Config
 
 See `.env.example`. `DAW_MODE=simulation|midi_export|postfader`.  
+`postfader` is a refuse stub on Linux CI / until live-probed — compose raises
+`DawWriteError` (does not return OK with buried `daw.succeeded=False`). Prefer
+`simulation` or `midi_export` until PostFader is verified on the Mac.  
 `MUSIC_AI_SEPARATOR=simulation` · `MUSIC_AI_TRANSCRIBER=stub`.  
 Keep `ALLOW_CLOUD_AUDIO=false` unless you opt in.
 

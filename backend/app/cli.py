@@ -48,9 +48,10 @@ def _settings(mode: str | None, workspace: Path | None) -> Settings:
 
 
 def _adapter(settings: Settings):
-    if settings.daw_mode == DawMode.MIDI_EXPORT:
-        return MidiExportAdapter(AssetStore(settings))
-    return FakeDawAdapter()
+    """Resolve DAW via registry — postfader/ableton stubs refuse honestly (no FakeDaw mask)."""
+    from backend.app.daw.registry import adapter_for_settings
+
+    return adapter_for_settings(settings)
 
 
 def _print_moves(moves) -> None:
@@ -84,7 +85,9 @@ def compose(
     prompt: str = typer.Argument(..., help="Creative brief / NL request"),
     seed: int | None = typer.Option(None, help="Explicit RNG seed"),
     bars: int = typer.Option(8, help="Loop length in bars (8–16)"),
-    mode: str | None = typer.Option(None, help="simulation | midi_export"),
+    mode: str | None = typer.Option(
+        None, help="simulation | midi_export | postfader (postfader refuses until live probe)"
+    ),
     workspace: Path | None = typer.Option(None, help="Override workspace directory"),
     lock: list[str] | None = typer.Option(None, help="Roles to lock (repeatable)"),
     recipe_id: str | None = typer.Option(None, help="Attach existing recipe UUID metadata"),
@@ -94,20 +97,35 @@ def compose(
         raise typer.BadParameter("bars must be 8–16")
     settings = _settings(mode, workspace)
     setup_logging(settings.log_level)
-    result = compose_from_prompt(
-        prompt,
-        seed=seed,
-        bars=bars,
-        settings=settings,
-        adapter=_adapter(settings),
-        locked_roles=list(lock or []),
-        recipe_id=UUID(recipe_id) if recipe_id else None,
-    )
+    try:
+        result = compose_from_prompt(
+            prompt,
+            seed=seed,
+            bars=bars,
+            settings=settings,
+            adapter=_adapter(settings),
+            locked_roles=list(lock or []),
+            recipe_id=UUID(recipe_id) if recipe_id else None,
+        )
+    except Exception as exc:  # noqa: BLE001 — surface DawWriteError / specialist refuse
+        from backend.app.daw.base import DawWriteError
+
+        if isinstance(exc, DawWriteError):
+            console.print(f"[bold red]DAW write failed[/] ({settings.daw_mode.value})")
+            console.print(f"  {exc}")
+            if exc.daw_result.user_action_required:
+                console.print(f"[yellow]User action:[/] {exc.daw_result.user_action_required}")
+            raise typer.Exit(code=1) from exc
+        raise
     console.print(f"[bold green]Project[/] {result.project.id}")
     console.print(f"  brief: {result.brief.title} ({result.brief.genre_template_id})")
     console.print(
         f"  seed: {result.project.seed}  bpm: {result.project.bpm}  "
         f"key: {result.project.key_estimate}  bars: {result.project.length_bars}"
+    )
+    console.print(
+        f"  specialist: {result.specialist_name or '—'} "
+        f"(mode={result.specialist_mode or '—'})"
     )
     console.print(f"  locks: {result.brief.locked_roles or '—'}")
     console.print(f"  candidate: {result.candidate.id}")

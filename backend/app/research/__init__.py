@@ -24,7 +24,9 @@ from backend.app.research.midi_specialist import (
     MidiSpecialistRequest,
     MidiSpecialistResult,
     OptionalNeuralMidiSpecialist,
+    compose_cir_from_brief,
     get_midi_specialist,
+    specialist_metadata,
 )
 from backend.app.research.mix_heuristics import (
     AdvancedMixReport,
@@ -59,6 +61,7 @@ __all__ = [
     "VocalPlan",
     "VocalWorkflow",
     "append_revision_outcome",
+    "compose_cir_from_brief",
     "get_midi_specialist",
     "get_vocal_workflow",
     "list_revision_outcomes",
@@ -66,4 +69,5 @@ __all__ = [
     "research_status",
     "run_advanced_mix_heuristics",
     "run_phase7_baseline_eval",
+    "specialist_metadata",
 ]

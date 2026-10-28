@@ -47,6 +47,8 @@ def _compose_payload(result: Any) -> dict[str, Any]:
         "next_moves": [o.model_dump(mode="json") for o in (result.next_moves or [])],
         "daw": result.daw_result.as_dict() if hasattr(result, "daw_result") else None,
         "snapshot_ref": getattr(result, "snapshot_ref", None),
+        "specialist_name": getattr(result, "specialist_name", None),
+        "specialist_mode": getattr(result, "specialist_mode", None),
     }
 
 

@@ -73,9 +73,26 @@ def test_revision_loop_logs_action_effect_outcomes(settings: Settings) -> None:
 
 
 def test_compose_uses_specialist_hook(settings: Settings) -> None:
+    from backend.app.services.compose import load_project_metadata
+    from backend.app.services.full_compose import full_compose_from_prompt
+
     result = compose_from_prompt("trap 140 BPM", seed=11, settings=settings)
     assert result.project.seed == 11
     assert len(result.midi_paths) >= 1
+    assert result.specialist_name == "deterministic_generators"
+    assert result.specialist_mode == "deterministic"
+    meta = load_project_metadata(result.project.id, settings=settings)
+    assert meta["specialist_name"] == "deterministic_generators"
+    assert meta["specialist_mode"] == "deterministic"
+
+    full = full_compose_from_prompt(
+        "mellow Afrobeats 110 BPM", seed=3, bars=48, settings=settings
+    )
+    assert full.specialist_name == "deterministic_generators"
+    assert full.specialist_mode == "deterministic"
+    full_meta = load_project_metadata(full.project.id, settings=settings)
+    assert full_meta["specialist_name"] == "deterministic_generators"
+    assert full_meta["specialist_mode"] == "deterministic"
 
 
 def test_research_api_and_midi_audition(client: TestClient, settings: Settings) -> None:

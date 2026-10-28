@@ -34,7 +34,7 @@ Legend: ✅ supported & verified in tests · ⚠️ partial / manual · ❌ unsu
 | `probe_capabilities` | ✅ | ✅ | ✅ (reports stub) | 🔲 |
 | `read_project` | ✅ (in-memory) | ❌ | ❌ refuse | 🔲 |
 | `read_tracks` | ✅ | ⚠️ local CIR only | ❌ refuse | 🔲 |
-| `create_or_update_notes` | ✅ | ✅ via `.mid` files | ❌ refuse | 🔲 |
+| `create_or_update_notes` | ✅ | ✅ via `.mid` files | ❌ refuse (compose raises `DawWriteError`) | 🔲 |
 | `set_tempo` | ✅ | ⚠️ embedded in MIDI | ❌ refuse | 🔲 |
 | `set_track_params` | ✅ | ❌ | ❌ refuse | 🔲 |
 | `choose_existing_preset` | ✅ | ❌ | ❌ refuse | 🔲 |

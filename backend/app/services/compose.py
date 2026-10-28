@@ -11,7 +11,7 @@ from uuid import UUID
 from backend.app.agents.critic import propose_next_moves
 from backend.app.core.config import DawMode, Settings, get_settings
 from backend.app.core.logging import log_event, setup_logging
-from backend.app.daw.base import DawAdapter, DawResult
+from backend.app.daw.base import DawAdapter, DawResult, ensure_daw_write_ok
 from backend.app.daw.fake import FakeDawAdapter
 from backend.app.daw.midi_fallback import MidiExportAdapter
 from backend.app.daw.registry import adapter_for_settings
@@ -30,7 +30,7 @@ from backend.app.models.schemas import (
 from backend.app.music.brief import parse_brief
 from backend.app.music.diff import baseline_diff_summary
 from backend.app.music.midi import assert_eight_bars_span, export_project_midi
-from backend.app.research.midi_specialist import MidiSpecialistRequest, get_midi_specialist
+from backend.app.research.midi_specialist import compose_cir_from_brief, specialist_metadata
 from backend.app.storage.assets import AssetStore
 from backend.app.storage.repository import ProjectRepository
 
@@ -47,6 +47,8 @@ class ComposeResult:
     metadata_path: Path | None = None
     snapshot_ref: str | None = None
     intent: dict[str, Any] = field(default_factory=dict)
+    specialist_name: str | None = None
+    specialist_mode: str | None = None
 
 
 def select_adapter(settings: Settings, assets: AssetStore) -> DawAdapter:
@@ -69,11 +71,8 @@ def compose_from_brief(
     repo = ProjectRepository(session_factory)
     assets = AssetStore(settings)
 
-    # Phase 7: specialist MIDI hook (default = deterministic generators).
-    specialist = get_midi_specialist(settings)
-    specialist_result = specialist.compose(
-        MidiSpecialistRequest(brief=brief, name=name)
-    )
+    # Phase 7: shared specialist MIDI hook (default = deterministic generators).
+    specialist_result = compose_cir_from_brief(brief, settings=settings, name=name)
     project = specialist_result.project
     project.brief_id = brief.id
     project.recipe_id = brief.recipe_id
@@ -87,6 +86,8 @@ def compose_from_brief(
         seed=project.seed,
         bpm=project.bpm,
         genre=brief.genre_template_id,
+        specialist_name=specialist_result.specialist_name,
+        specialist_mode=specialist_result.mode,
     )
 
     midi_dir = assets.midi_dir(project.id)
@@ -100,6 +101,8 @@ def compose_from_brief(
         snapshot_ref = snap.observations.get("snapshot_ref")
 
     daw_result = daw.create_or_update_notes(project)
+    # Refuse stubs (e.g. DAW_MODE=postfader) must not return OK with buried failure.
+    ensure_daw_write_ok(daw_result, context="compose")
     if isinstance(daw, FakeDawAdapter):
         daw.set_tempo(project.bpm)
         daw.verify_postcondition({"bpm": project.bpm, "min_tracks": 3, "min_notes": 10})
@@ -156,6 +159,7 @@ def compose_from_brief(
     except Exception as exc:  # noqa: BLE001 — never block compose on critic failures
         log_event(logger, "compose.critic_fallback", error=str(exc))
         next_moves = propose_next_moves(project)
+    spec_meta = specialist_metadata(specialist_result)
     meta = {
         "project_id": str(project.id),
         "version_id": str(version.id),
@@ -172,6 +176,7 @@ def compose_from_brief(
         "snapshot_ref": snapshot_ref,
         "mode": settings.daw_mode.value,
         "schema_version": project.schema_version,
+        **spec_meta,
     }
     metadata_path = assets.write_json(f"projects/{project.id}/metadata.json", meta)
     assets.write_json(f"projects/{project.id}/brief.json", brief.model_dump(mode="json"))
@@ -194,6 +199,8 @@ def compose_from_brief(
             "novelty": brief.novelty,
             "locked_roles": brief.locked_roles,
         },
+        specialist_name=specialist_result.specialist_name,
+        specialist_mode=specialist_result.mode,
     )
 
 

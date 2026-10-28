@@ -39,6 +39,8 @@ def settings(tmp_path) -> Settings:
 
 
 def test_deterministic_specialist_composes(settings: Settings) -> None:
+    from backend.app.research.midi_specialist import compose_cir_from_brief
+
     brief = parse_brief("mellow Afrobeats 110 BPM in A minor", seed=42, bars=8)
     result = DeterministicMidiSpecialist().compose(
         MidiSpecialistRequest(brief=brief, name="t")
@@ -47,6 +49,9 @@ def test_deterministic_specialist_composes(settings: Settings) -> None:
     assert result.cir_is_system_of_record is True
     assert len(result.project.tracks) >= 3
     assert get_midi_specialist(settings).name == "deterministic_generators"
+    shared = compose_cir_from_brief(brief, settings=settings, name="shared")
+    assert shared.specialist_name == "deterministic_generators"
+    assert shared.mode == "deterministic"
 
 
 def test_optional_specialist_refuses_without_flag(settings: Settings) -> None:
@@ -144,6 +149,27 @@ def test_multi_daw_registry_and_stubs() -> None:
     assert refused.succeeded is False
     probe = LogicStubAdapter().probe_capabilities()
     assert probe.observations["capabilities"]["stub"] is True
+
+
+def test_postfader_compose_fails_honestly(settings: Settings, tmp_path) -> None:
+    """DAW_MODE=postfader must not return OK with buried daw.succeeded=False."""
+    from backend.app.core.config import DawMode
+    from backend.app.daw.base import DawWriteError
+    from backend.app.daw.registry import adapter_for_settings
+    from backend.app.daw.stubs import PostFaderStubAdapter
+    from backend.app.services.compose import compose_from_prompt, select_adapter
+
+    settings.daw_mode = DawMode.POSTFADER
+    settings.workspace_dir = tmp_path / "ws_post"
+    settings.database_url = f"sqlite:///{tmp_path / 'ws_post' / 'music_ai.db'}"
+    settings.ensure_workspace()
+
+    adapter = adapter_for_settings(settings)
+    assert isinstance(adapter, PostFaderStubAdapter)
+    assert isinstance(select_adapter(settings, None), PostFaderStubAdapter)  # type: ignore[arg-type]
+
+    with pytest.raises(DawWriteError, match="postfader|stub|DAW write failed"):
+        compose_from_prompt("trap 140 BPM", seed=9, settings=settings)
 
 
 def test_dual_path_policy() -> None:
