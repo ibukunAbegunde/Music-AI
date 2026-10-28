@@ -149,6 +149,7 @@ def compose_from_brief(
         "seed": project.seed,
         "bpm": project.bpm,
         "key": project.key_estimate,
+        "genre_template_id": project.genre_template_id,
         "bars": project.length_bars,
         "recipe_id": str(project.recipe_id) if project.recipe_id else None,
         "candidate": candidate.model_dump(mode="json"),

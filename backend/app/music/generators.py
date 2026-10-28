@@ -255,6 +255,7 @@ def generate_from_brief(brief: BriefDocument, *, name: str | None = None) -> Mus
         sections=[section],
         section_ids=[section.id],
         generation_brief=brief.free_text,
+        genre_template_id=tmpl.id,
         brief_id=brief.id,
         status=ProjectStatus.COMPOSING,
         seed=seed,

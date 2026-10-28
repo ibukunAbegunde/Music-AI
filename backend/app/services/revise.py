@@ -116,11 +116,13 @@ def revise_project(
         brief.key = explicit_key
     else:
         brief.key = parent.key_estimate
-    if explicit_genre_from_text(instruction) is None and parent.generation_brief:
-        # Keep parent's genre template when revise text is lock/edit-only
+    if explicit_genre_from_text(instruction) is None:
+        # Prefer persisted id — generation_brief is overwritten with revise text
         from backend.app.music.templates import get_template
 
-        parent_genre = explicit_genre_from_text(parent.generation_brief or "")
+        parent_genre = parent.genre_template_id or explicit_genre_from_text(
+            parent.generation_brief or ""
+        )
         if parent_genre:
             brief.genre_template_id = parent_genre
             tmpl = get_template(parent_genre)
@@ -145,6 +147,7 @@ def revise_project(
     merged.recipe_id = parent.recipe_id
     merged.brief_id = parent.brief_id
     merged.generation_brief = instruction
+    merged.genre_template_id = brief.genre_template_id or parent.genre_template_id
     merged.updated_at = utcnow()
     merged.status = ProjectStatus.APPLYING
 
@@ -227,6 +230,7 @@ def revise_project(
         "seed": merged.seed,
         "bpm": merged.bpm,
         "key": merged.key_estimate,
+        "genre_template_id": merged.genre_template_id,
         "bars": merged.length_bars,
         "recipe_id": str(merged.recipe_id) if merged.recipe_id else None,
         "candidate": candidate.model_dump(mode="json"),

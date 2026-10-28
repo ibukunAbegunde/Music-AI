@@ -172,6 +172,7 @@ class MusicProject(BaseModel):
     tracks: list[MusicTrack] = Field(default_factory=list)
     sections: list[Section] = Field(default_factory=list)
     generation_brief: str | None = None
+    genre_template_id: str | None = None
     daw_type: str = "fl_studio"
     daw_path: str | None = None
     version_id: UUID | None = None
