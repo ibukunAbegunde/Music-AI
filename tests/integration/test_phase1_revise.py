@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 from backend.app.core.config import DawMode, Settings
 from backend.app.daw.fake import FakeDawAdapter
 from backend.app.daw.midi_fallback import MidiExportAdapter
@@ -51,7 +53,6 @@ def test_revise_keeps_drums(tmp_settings: Settings) -> None:
     assert [n.model_dump() for n in drums_before.note_events] == [
         n.model_dump() for n in drums_after.note_events
     ]
-    # Soften bass should reduce velocities
     bass_before = next(t for t in revised.parent.tracks if t.role.value == "bass")
     bass_after = next(t for t in revised.project.tracks if t.role.value == "bass")
     assert sum(n.velocity for n in bass_after.note_events) < sum(
@@ -60,6 +61,63 @@ def test_revise_keeps_drums(tmp_settings: Settings) -> None:
     assert revised.candidate.one_line_diff
     assert revised.undo_available
     assert revised.snapshot_ref
+    # Critic must not target locked drums
+    assert all(m.target_role != "drums" for m in revised.next_moves)
+
+
+def test_revise_preserves_key_and_updates_metadata(tmp_settings: Settings) -> None:
+    daw = FakeDawAdapter()
+    composed = compose_from_prompt(
+        "trap 140 BPM in C major",
+        seed=1,
+        settings=tmp_settings,
+        adapter=daw,
+    )
+    assert composed.project.key_estimate == "C major"
+    revised = revise_project(
+        composed.project.id,
+        "keep the drums, soften bass",
+        seed=2,
+        settings=tmp_settings,
+        adapter=daw,
+    )
+    assert revised.project.key_estimate == "C major"
+    assert revised.project.bpm == 140.0
+    assets = AssetStore(tmp_settings)
+    meta = json.loads(
+        (assets.root / "projects" / str(revised.project.id) / "metadata.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert meta["version_id"] == str(revised.version.id)
+    assert meta["key"] == "C major"
+    cand_path = (
+        assets.root / "projects" / str(revised.project.id) / f"candidate_{revised.candidate.id}.json"
+    )
+    assert cand_path.exists()
+
+
+def test_revise_add_fill_respects_drum_lock(tmp_settings: Settings) -> None:
+    daw = FakeDawAdapter()
+    composed = compose_from_prompt(
+        "Afrobeats 110 BPM in A minor",
+        seed=5,
+        settings=tmp_settings,
+        adapter=daw,
+    )
+    revised = revise_project(
+        composed.project.id,
+        "keep the drums, soften bass and add a fill before bar 8",
+        seed=6,
+        settings=tmp_settings,
+        adapter=daw,
+    )
+    assert revised.diff.locked_roles_respected
+    drums_before = next(t for t in revised.parent.tracks if t.role.value == "drums")
+    drums_after = next(t for t in revised.project.tracks if t.role.value == "drums")
+    assert [n.model_dump() for n in drums_before.note_events] == [
+        n.model_dump() for n in drums_after.note_events
+    ]
 
 
 def test_midi_export_revise_path(tmp_settings: Settings) -> None:
@@ -86,3 +144,19 @@ def test_midi_export_revise_path(tmp_settings: Settings) -> None:
     )
     assert revised.diff.locked_roles_respected
     assert revised.midi_paths["bass"].exists()
+
+
+def test_compose_attaches_recipe_id(tmp_settings: Settings) -> None:
+    from uuid import uuid4
+
+    rid = uuid4()
+    result = compose_from_prompt(
+        "pop 120 BPM",
+        seed=9,
+        settings=tmp_settings,
+        adapter=FakeDawAdapter(),
+        recipe_id=rid,
+    )
+    assert result.project.recipe_id == rid
+    meta = json.loads(result.metadata_path.read_text(encoding="utf-8"))
+    assert meta["recipe_id"] == str(rid)
