@@ -19,6 +19,8 @@ source .venv/bin/activate
 pip install -e ".[dev]"
 cp .env.example .env
 # set DAW_MODE=midi_export until PostFader is verified
+# DAW_MODE=postfader selects a refuse stub until live-probed — compose fails
+# honestly (DawWriteError) rather than returning OK with buried daw failure.
 mkdir -p workspace
 python -m scripts.doctor
 pytest

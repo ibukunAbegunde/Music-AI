@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Play, RefreshCw, Sparkles, Wand2 } from 'lucide-react'
+import { ExternalLink, Music2, Play, RefreshCw, Sparkles, Wand2 } from 'lucide-react'
 import { api, ApiError } from '@/api/client'
 import { BriefCanvas } from '@/components/brief/BriefCanvas'
 import { TrackLocks } from '@/components/workspace/TrackLocks'
@@ -32,6 +32,12 @@ export function WorkspacePage() {
   const [error, setError] = useState<string | null>(null)
   const [restoringId, setRestoringId] = useState<string | null>(null)
   const [bootLoading, setBootLoading] = useState(true)
+  const [midiAudition, setMidiAudition] = useState<{
+    midi_paths: Record<string, string>
+    note: string
+    normalization_status: string
+  } | null>(null)
+  const [auditionLoading, setAuditionLoading] = useState(false)
 
   useEffect(() => {
     void (async () => {
@@ -66,6 +72,7 @@ export function WorkspacePage() {
             daw: (metadata.daw as Record<string, unknown>) ?? null,
           })
           setBrief((metadata.brief as BriefDocument) ?? null)
+          void loadMidiAudition(stored)
         }
       } catch {
         /* empty workspace is fine */
@@ -78,6 +85,22 @@ export function WorkspacePage() {
   async function refreshVersions(projectId: string) {
     const vs = await api.versions(projectId)
     setVersions(vs)
+  }
+
+  async function loadMidiAudition(projectId: string) {
+    setAuditionLoading(true)
+    try {
+      const stub = await api.midiAudition(projectId)
+      setMidiAudition({
+        midi_paths: stub.midi_paths,
+        note: stub.note,
+        normalization_status: stub.normalization_status,
+      })
+    } catch {
+      setMidiAudition(null)
+    } finally {
+      setAuditionLoading(false)
+    }
   }
 
   async function handleParse() {
@@ -121,6 +144,7 @@ export function WorkspacePage() {
       setBrief(composed.brief)
       localStorage.setItem(PROJECT_KEY, composed.project.id)
       await refreshVersions(composed.project.id)
+      await loadMidiAudition(composed.project.id)
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : 'Compose failed')
     } finally {
@@ -141,6 +165,7 @@ export function WorkspacePage() {
       setResult(revised)
       localStorage.setItem(PROJECT_KEY, revised.project.id)
       await refreshVersions(revised.project.id)
+      await loadMidiAudition(revised.project.id)
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : 'Revise failed')
     } finally {
@@ -271,6 +296,58 @@ export function WorkspacePage() {
                 </p>
               </div>
             ) : null}
+
+            <div className="mb-4 rounded-lg border border-dashed border-line bg-paper/50 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Music2 className="h-4 w-4 text-accent" />
+                  <p className="text-xs font-medium uppercase tracking-wider text-ink-muted">
+                    MIDI audition (stub)
+                  </p>
+                  <Badge tone="warn">midi_proxy</Badge>
+                </div>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={auditionLoading}
+                  onClick={() => void loadMidiAudition(result.project.id)}
+                >
+                  {auditionLoading ? 'Loading…' : 'Refresh paths'}
+                </Button>
+              </div>
+              <p className="mt-2 text-xs text-ink-muted">
+                {midiAudition?.note ??
+                  'MIDI proxy only — no in-browser audio. Open paths in a DAW / MIDI player.'}
+              </p>
+              {midiAudition && Object.keys(midiAudition.midi_paths).length > 0 ? (
+                <ul className="mt-2 space-y-1">
+                  {Object.entries(midiAudition.midi_paths).map(([role, path]) => (
+                    <li key={role} className="flex flex-wrap items-center gap-2 text-xs">
+                      <span className="font-medium text-ink">{role}</span>
+                      <code className="max-w-full truncate rounded bg-white/80 px-1.5 py-0.5 text-ink-muted">
+                        {path}
+                      </code>
+                      <a
+                        href={`file://${path}`}
+                        className="inline-flex items-center gap-1 text-accent hover:underline"
+                        title="Open locally (file:// — browser may block)"
+                      >
+                        <ExternalLink className="h-3 w-3" />
+                        path
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-2 text-xs text-ink-muted">
+                  {Object.keys(result.midi_paths || {}).length
+                    ? Object.entries(result.midi_paths)
+                        .map(([k, v]) => `${k}: ${v}`)
+                        .join(' · ')
+                    : 'No MIDI paths yet — compose to export.'}
+                </p>
+              )}
+            </div>
 
             <h3 className="mb-2 text-xs font-medium uppercase tracking-wider text-ink-muted">Tracks / locks</h3>
             <TrackLocks tracks={result.project.tracks} />

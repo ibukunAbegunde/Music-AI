@@ -2,7 +2,7 @@
 
 Last updated: 2026-10-28  
 Spec: **v1.1** (Agent Store)  
-Current phase: **Phase 6 — Autonomous full-length (simulation / MIDI)**
+Current phase: **Phase 7 — Research upgrades (simulation / stubs / harnesses)**
 
 ## Phase checklist
 
@@ -15,13 +15,13 @@ Current phase: **Phase 6 — Autonomous full-length (simulation / MIDI)**
 | 4 | Critic + multi-iteration | ✅ Implemented (simulation + fixtures; eval-driven PatchOps) |
 | 5 | Personal taste model | ✅ Implemented (simulation encoder + ranking head; no CLAP download) |
 | 6 | Autonomous full-length | ✅ Implemented (sim/FakeDaw/MIDI; manual FL Playlist steps) |
-| 7 | Research upgrades | ❌ Not started |
+| 7 | Research upgrades | ✅ Implemented (interfaces + honest stubs + eval harness; no foundation downloads) |
 
 ## Module status
 
 | Module | Status | Verification |
 |--------|--------|----------------|
-| Domain schemas v0.3+ (BorrowTrait, StemRoleMapping, Brief, Recipe, Candidate, MusicalDiff, PatchOp, Taste*, …) | ✅ | mock-tested |
+| Domain schemas v0.3+ (BorrowTrait, StemRoleMapping, Brief, Recipe, Candidate, MusicalDiff, PatchOp, Taste*, MidiAuditionStub, …) | ✅ | mock-tested |
 | Genre templates library | ✅ | mock-tested |
 | NL → BriefDocument parser | ✅ | mock-tested |
 | Richer drum/bass/chord generators + conditioning | ✅ | mock-tested |
@@ -37,10 +37,19 @@ Current phase: **Phase 6 — Autonomous full-length (simulation / MIDI)**
 | Version timeline + restore | ✅ | mock-tested |
 | FakeDaw verify/undo | ✅ | mock-tested |
 | MidiExportAdapter | ✅ | mock-tested / manual-fallback |
+| Multi-DAW registry + Ableton/Logic/Reaper/PostFader stubs | ✅ | mock-tested (refuse live) |
 | Critic → typed PatchOps | ✅ | mock-tested (eval-driven + lock-aware) |
 | PatchOp CIR applicator | ✅ | mock-tested |
 | `render_eval` technical + musical | ✅ | mock-tested (fixtures + CIR sim) |
 | Bounded revision loop + rollback | ✅ | mock-tested |
+| RevisionOutcome / action-effect scaffolding | ✅ | mock-tested |
+| Advanced mix heuristics stubs | ✅ stub | mock-tested |
+| Specialist MIDI composition hooks | ✅ | mock-tested (deterministic default) |
+| Optional neural MIDI specialist | 🚧 refuses | no download without flag |
+| Vocal workflow stub (guide MIDI) | ✅ stub | mock-tested |
+| Optional neural vocal model | 🚧 refuses | no download without flag |
+| Dual-path neural audio policy (CIR SoR) | ✅ | mock-tested |
+| Blind listening eval harness vs Phase 6 | ✅ harness | mock-tested (sim proxy; listening not_run) |
 | Reference ingest (hash, rights, immutable store) | ✅ | mock-tested |
 | Feature analysis (BPM/key/groove estimates) | ✅ | mock-tested |
 | Stem separator interface + simulation adapter | ✅ | mock-tested |
@@ -62,10 +71,12 @@ Current phase: **Phase 6 — Autonomous full-length (simulation / MIDI)**
 | Scratch vs Release compose gate | ✅ | mock-tested (Release blocks DAW write) |
 | Instrument palette hints | ✅ | mock-tested |
 | AuditionRequest / sound match | 🚧 schema stub | — |
-| FastAPI local API (compose/revise/ref/full/jobs) | ✅ | mock-tested |
+| MIDI audition UI stub (path list + midi_proxy) | ✅ | API + Workspace |
+| FastAPI local API (compose/revise/ref/full/jobs/research) | ✅ | mock-tested |
 | React+Vite UI (Workspace / Refs / A/B / Jobs / Settings) | ✅ | build + API smoke |
 | Brief canvas + role-lock controls (UI scaffold) | ✅ | wired to parse/compose/revise |
 | Version timeline + A/B musical diff (UI) | ✅ | wired to existing services |
+| Jobs cancel (status-only stub) | ✅ | labeled stub; no in-flight abort |
 | DAW approval drawer UI | 🚧 stub next-moves list | — |
 | Live loop strip / sound-library audition | ❌ | deferred |
 | Live PostFader / FL Studio | ❌ | blocked (N/A on Linux CI) |
@@ -87,11 +98,19 @@ Current phase: **Phase 6 — Autonomous full-length (simulation / MIDI)**
 - Phase 6 full-length uses simulation generators tiled across structure templates — not a learned long-form model.
 - Live FL Playlist arrangement is **manual** (`docs/setup-macos-fl-studio.md#phase-6-full-length-import`).
 - Release mode (collaborative) exports MIDI + plan but does not auto-write FakeDaw notes.
+- Phase 7 specialist MIDI default **is** the deterministic generators — not a fine-tuned model.
+- Action-effect predictor is a **heuristic** over logged outcomes — not trained.
+- Advanced mix heuristics are **simulation proxies** — not mastering AI / live bounce.
+- Vocal stub writes guide MIDI only — no neural singing / voice cloning.
+- Multi-DAW stubs (Ableton/Logic/Reaper/PostFader) **refuse** live control until probed on-device.
+- Blind listening eval harness runs a **simulation preference_proxy**; real listening studies are manual.
+- Jobs cancel flips SQLite status only — does not abort in-flight compose.
 
 ## Next
 
-1. Phase 7 research upgrades (optional research track).
-2. Wire live bounce metrics on Mac when PostFader probed.
-3. Optional Demucs / Basic Pitch / audio encoder only after explicit approval (see `docs/audio-models.md`).
+1. Real blind listening sessions vs Phase 6 baseline (manual; feed BlindListeningHarness).
+2. Wire live bounce metrics on Mac when PostFader probed; replace mix stubs with measured metrics.
+3. Optional Demucs / Basic Pitch / audio encoder / MIDI specialist / vocal model only after explicit approval (see `docs/audio-models.md`).
 4. Collect real listening pairwise data to replace/augment `taste-simulate`.
 5. Live loop strip + loudness-matched audition + DAW approval drawer polish.
+6. Train action-effect model from accumulated `RevisionOutcome` rows when enough licensed revision data exists (user approval).

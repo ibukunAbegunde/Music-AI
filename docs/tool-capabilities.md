@@ -28,21 +28,23 @@ music-ai probe-daw
 
 Legend: ✅ supported & verified in tests · ⚠️ partial / manual · ❌ unsupported · 🔲 not probed live
 
-| Operation | FakeDawAdapter | MidiExportAdapter | PostFader (live Mac) |
-|-----------|----------------|-------------------|----------------------|
-| `connect` | ✅ | ✅ | 🔲 |
-| `probe_capabilities` | ✅ | ✅ | 🔲 |
-| `read_project` | ✅ (in-memory) | ❌ | 🔲 |
-| `read_tracks` | ✅ | ⚠️ local CIR only | 🔲 |
-| `create_or_update_notes` | ✅ | ✅ via `.mid` files | 🔲 |
-| `set_tempo` | ✅ | ⚠️ embedded in MIDI | 🔲 |
-| `set_track_params` | ✅ | ❌ | 🔲 |
-| `choose_existing_preset` | ✅ | ❌ | 🔲 |
-| `arrange_section` | ✅ | ❌ | 🔲 |
-| `save_snapshot` | ✅ | ❌ (save `.flp` manually) | 🔲 |
-| `export_audio_or_request_manual_bounce` | ⚠️ user bounce | ⚠️ user bounce | 🔲 |
-| `verify_postcondition` | ✅ | ✅ MIDI parse | 🔲 |
-| `undo_or_restore` | ✅ | ❌ | 🔲 |
+| Operation | FakeDawAdapter | MidiExportAdapter | PostFader / Ableton / Logic / Reaper stubs | PostFader (live Mac) |
+|-----------|----------------|-------------------|---------------------------------------------|----------------------|
+| `connect` | ✅ | ✅ | ❌ refuse | 🔲 |
+| `probe_capabilities` | ✅ | ✅ | ✅ (reports stub) | 🔲 |
+| `read_project` | ✅ (in-memory) | ❌ | ❌ refuse | 🔲 |
+| `read_tracks` | ✅ | ⚠️ local CIR only | ❌ refuse | 🔲 |
+| `create_or_update_notes` | ✅ | ✅ via `.mid` files | ❌ refuse (compose raises `DawWriteError`) | 🔲 |
+| `set_tempo` | ✅ | ⚠️ embedded in MIDI | ❌ refuse | 🔲 |
+| `set_track_params` | ✅ | ❌ | ❌ refuse | 🔲 |
+| `choose_existing_preset` | ✅ | ❌ | ❌ refuse | 🔲 |
+| `arrange_section` | ✅ | ❌ | ❌ refuse | 🔲 |
+| `save_snapshot` | ✅ | ❌ (save `.flp` manually) | ❌ refuse | 🔲 |
+| `export_audio_or_request_manual_bounce` | ⚠️ user bounce | ⚠️ user bounce | ❌ refuse | 🔲 |
+| `verify_postcondition` | ✅ | ✅ MIDI parse | ❌ refuse | 🔲 |
+| `undo_or_restore` | ✅ | ❌ | ❌ refuse | 🔲 |
+
+`music-ai list-daws` prints the Phase 7 multi-DAW registry.
 
 ## Verified Phase 0 operations (simulation)
 
@@ -61,17 +63,21 @@ Legend: ✅ supported & verified in tests · ⚠️ partial / manual · ❌ unsu
 | Transcription | ✅ **Stub** adapter (`MUSIC_AI_TRANSCRIBER=stub`) → editable MIDI. Basic Pitch optional, refuses without install. |
 | BPM / key / groove estimates | ✅ Numpy heuristics (`is_estimate=True`) |
 | Embeddings (CLAP/MERT) | ❌ Deferred |
-| Taste / preference model | ❌ Phase 5 — not started |
+| Taste / preference model | ✅ Phase 5 simulation encoder + ranking head |
+| Phase 7 specialist MIDI | ✅ Deterministic hook; optional neural refuses |
+| Phase 7 multi-DAW registry | ✅ Discoverable; non-Fake/MIDI adapters refuse live |
+| Phase 7 blind eval harness | ✅ Simulation proxy; real listening not_run in CI |
 
-See `docs/audio-models.md` for optional Demucs / Basic Pitch enablement (no auto-download).
+See `docs/audio-models.md` for optional Demucs / Basic Pitch / Phase 7 enablement (no auto-download).
 
 ## Explicitly unsupported / not claimed
 
 - Live FL Studio project mutation from this VM.
 - Unattended audio bounce.
 - PostFader tool names or method signatures (must be discovered on the Mac; never fabricated).
-- Neural stem separation / Basic Pitch without an explicit local install.
-- Audio embeddings and personal taste model (later phases).
+- Neural stem separation / Basic Pitch / MIDI specialist / vocal models without an explicit local install + approval flag.
+- Blind listening preference wins from CI simulation alone.
+- Live Ableton / Logic / Reaper control (stubs only).
 - Sending user audio to external services (`ALLOW_CLOUD_AUDIO=false`).
 
 ## When the user probes on macOS

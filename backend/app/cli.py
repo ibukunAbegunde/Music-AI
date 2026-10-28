@@ -22,7 +22,7 @@ from backend.app.services.revise import revise_project
 from backend.app.storage.assets import AssetStore
 
 app = typer.Typer(
-    help="Private AI Music Producer — Phase 0–6 CLI (refs, critic, taste, full-length)",
+    help="Private AI Music Producer — Phase 0–7 CLI (refs, critic, taste, full-length, research)",
     no_args_is_help=True,
 )
 console = Console()
@@ -48,9 +48,10 @@ def _settings(mode: str | None, workspace: Path | None) -> Settings:
 
 
 def _adapter(settings: Settings):
-    if settings.daw_mode == DawMode.MIDI_EXPORT:
-        return MidiExportAdapter(AssetStore(settings))
-    return FakeDawAdapter()
+    """Resolve DAW via registry — postfader/ableton stubs refuse honestly (no FakeDaw mask)."""
+    from backend.app.daw.registry import adapter_for_settings
+
+    return adapter_for_settings(settings)
 
 
 def _print_moves(moves) -> None:
@@ -84,7 +85,9 @@ def compose(
     prompt: str = typer.Argument(..., help="Creative brief / NL request"),
     seed: int | None = typer.Option(None, help="Explicit RNG seed"),
     bars: int = typer.Option(8, help="Loop length in bars (8–16)"),
-    mode: str | None = typer.Option(None, help="simulation | midi_export"),
+    mode: str | None = typer.Option(
+        None, help="simulation | midi_export | postfader (postfader refuses until live probe)"
+    ),
     workspace: Path | None = typer.Option(None, help="Override workspace directory"),
     lock: list[str] | None = typer.Option(None, help="Roles to lock (repeatable)"),
     recipe_id: str | None = typer.Option(None, help="Attach existing recipe UUID metadata"),
@@ -94,20 +97,35 @@ def compose(
         raise typer.BadParameter("bars must be 8–16")
     settings = _settings(mode, workspace)
     setup_logging(settings.log_level)
-    result = compose_from_prompt(
-        prompt,
-        seed=seed,
-        bars=bars,
-        settings=settings,
-        adapter=_adapter(settings),
-        locked_roles=list(lock or []),
-        recipe_id=UUID(recipe_id) if recipe_id else None,
-    )
+    try:
+        result = compose_from_prompt(
+            prompt,
+            seed=seed,
+            bars=bars,
+            settings=settings,
+            adapter=_adapter(settings),
+            locked_roles=list(lock or []),
+            recipe_id=UUID(recipe_id) if recipe_id else None,
+        )
+    except Exception as exc:  # noqa: BLE001 — surface DawWriteError / specialist refuse
+        from backend.app.daw.base import DawWriteError
+
+        if isinstance(exc, DawWriteError):
+            console.print(f"[bold red]DAW write failed[/] ({settings.daw_mode.value})")
+            console.print(f"  {exc}")
+            if exc.daw_result.user_action_required:
+                console.print(f"[yellow]User action:[/] {exc.daw_result.user_action_required}")
+            raise typer.Exit(code=1) from exc
+        raise
     console.print(f"[bold green]Project[/] {result.project.id}")
     console.print(f"  brief: {result.brief.title} ({result.brief.genre_template_id})")
     console.print(
         f"  seed: {result.project.seed}  bpm: {result.project.bpm}  "
         f"key: {result.project.key_estimate}  bars: {result.project.length_bars}"
+    )
+    console.print(
+        f"  specialist: {result.specialist_name or '—'} "
+        f"(mode={result.specialist_mode or '—'})"
     )
     console.print(f"  locks: {result.brief.locked_roles or '—'}")
     console.print(f"  candidate: {result.candidate.id}")
@@ -1200,6 +1218,160 @@ def style_vectors_cmd(
             "  [yellow]No approved recipes with CIR — save+approve a recipe first "
             "(music-ai recipe-save …). Vectors are not invented.[/]"
         )
+
+
+@app.command("research-status")
+def research_status_cmd(
+    workspace: Path | None = typer.Option(None),
+) -> None:
+    """Phase 7 research capability registry (stubs + hooks; no model downloads)."""
+    from backend.app.research.registry import research_status
+
+    settings = _settings(None, workspace)
+    status = research_status(settings)
+    console.print_json(data=status)
+
+
+@app.command("research-eval")
+def research_eval_cmd(
+    prompt: Annotated[str, typer.Argument()] = "mellow Afrobeats 110 BPM in A minor",
+    seed: int = typer.Option(42),
+    bars: int = typer.Option(8, min=8, max=16),
+    workspace: Path | None = typer.Option(None),
+) -> None:
+    """Simulation eval harness: Phase 7 specialist path vs Phase 6 baseline."""
+    from backend.app.research.eval_harness import run_phase7_baseline_eval
+    from backend.app.storage.assets import AssetStore
+
+    settings = _settings(None, workspace)
+    result = run_phase7_baseline_eval(prompt, seed=seed, bars=bars, settings=settings)
+    assets = AssetStore(settings)
+    out = assets.write_json(
+        f"research/eval/{result.id}.json",
+        result.model_dump(mode="json"),
+    )
+    console.print(
+        f"[bold green]Research eval[/] preference_proxy={result.preference_proxy} "
+        f"Δtech={result.delta_technical:+.4f} Δmus={result.delta_musical:+.4f}"
+    )
+    console.print(f"  blind_listening_status={result.blind_listening_status} (sim only)")
+    console.print(f"  wrote {out}")
+    for n in result.notes:
+        console.print(f"  · {n}")
+
+
+@app.command("action-effect-log")
+def action_effect_log_cmd(
+    project_id: str | None = typer.Option(None, "--project"),
+    accepted_only: bool = typer.Option(False),
+    workspace: Path | None = typer.Option(None),
+) -> None:
+    """List logged revision outcomes for action-effect scaffolding."""
+    from uuid import UUID
+
+    from backend.app.research.action_effect import list_revision_outcomes
+
+    settings = _settings(None, workspace)
+    pid = UUID(project_id) if project_id else None
+    rows = list_revision_outcomes(
+        settings=settings, project_id=pid, accepted_only=accepted_only
+    )
+    table = Table(title=f"Revision outcomes ({len(rows)})")
+    table.add_column("id")
+    table.add_column("project")
+    table.add_column("accepted")
+    table.add_column("Δtech")
+    table.add_column("Δmus")
+    table.add_column("ops")
+    for r in rows:
+        ops = ",".join(o.action_type for o in r.ops)[:40]
+        table.add_row(
+            str(r.id)[:8],
+            str(r.project_id)[:8],
+            "yes" if r.accepted else "no",
+            "" if r.delta_technical is None else f"{r.delta_technical:+.3f}",
+            "" if r.delta_musical is None else f"{r.delta_musical:+.3f}",
+            ops or "—",
+        )
+    console.print(table)
+
+
+@app.command("mix-heuristics")
+def mix_heuristics_cmd(
+    project_id: Annotated[str, typer.Argument()],
+    workspace: Path | None = typer.Option(None),
+) -> None:
+    """Run advanced mix heuristic stubs on a CIR project (simulation)."""
+    from uuid import UUID
+
+    from backend.app.research.mix_heuristics import run_advanced_mix_heuristics
+    from backend.app.services.revise import _load_cir
+
+    settings = _settings(None, workspace)
+    assets = AssetStore(settings)
+    project = _load_cir(assets, UUID(project_id), None)
+    if project is None:
+        raise typer.BadParameter(f"project {project_id} not found")
+    report = run_advanced_mix_heuristics(project)
+    console.print(
+        f"[bold green]Advanced mix[/] overall={report.overall_mix_score:.3f} "
+        f"source={report.source}"
+    )
+    for h in report.heuristics:
+        console.print(f"  [{h.severity}] {h.name}: {h.score:.2f} — {h.suggestion}")
+
+
+@app.command("vocal-stub")
+def vocal_stub_cmd(
+    project_id: Annotated[str, typer.Argument()],
+    lyric: str | None = typer.Option(None, "--lyric"),
+    apply: bool = typer.Option(False, "--apply", help="Write guide-MIDI vocal track into CIR tip"),
+    workspace: Path | None = typer.Option(None),
+) -> None:
+    """Optional vocal workflow stub — guide MIDI only; no neural singing."""
+    from uuid import UUID
+
+    from backend.app.models.db import init_db
+    from backend.app.research.vocal import get_vocal_workflow
+    from backend.app.services.revise import _load_cir
+    from backend.app.storage.repository import ProjectRepository
+
+    settings = _settings(None, workspace)
+    assets = AssetStore(settings)
+    project = _load_cir(assets, UUID(project_id), None)
+    if project is None:
+        raise typer.BadParameter(f"project {project_id} not found")
+    wf = get_vocal_workflow(settings)
+    plan = wf.plan_vocals(project, lyric_hint=lyric)
+    console.print(f"[bold green]Vocal plan[/] mode={plan.mode} bars={plan.bars}")
+    for n in plan.notes:
+        console.print(f"  · {n}")
+    if apply:
+        updated = wf.apply_guide_melody(project, plan)
+        session_factory = init_db(settings)
+        ProjectRepository(session_factory).save_project(updated)
+        assets.write_json(
+            f"projects/{updated.id}/vocal_plan.json",
+            plan.model_dump(mode="json"),
+        )
+        console.print(
+            f"  applied guide MIDI vocal track; tracks={len(updated.tracks)} "
+            f"(CIR tip updated — re-export MIDI via compose/revise as needed)"
+        )
+
+
+@app.command("list-daws")
+def list_daws_cmd() -> None:
+    """List multi-DAW adapter registry (FakeDaw / MidiExport + Phase 7 stubs)."""
+    from backend.app.daw.registry import list_daw_adapters
+
+    table = Table(title="DAW adapters")
+    table.add_column("id")
+    table.add_column("live")
+    table.add_column("description")
+    for row in list_daw_adapters():
+        table.add_row(row["id"], "yes" if row["live"] else "no", row["description"])
+    console.print(table)
 
 
 if __name__ == "__main__":

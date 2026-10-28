@@ -1,10 +1,10 @@
 # Architecture — Private AI Music Producer
 
-Version: 0.5.0 (Phase 0–6 + local API/UI) | Spec: build spec **v1.1** + `product-upgrades-v1.1.md` (Agent Store)
+Version: 0.7.0 (Phase 0–7 research stubs + local API/UI) | Spec: build spec **v1.1** + `product-upgrades-v1.1.md` (Agent Store)
 
 ## Purpose
 
-Local-first, reference-aware music production assistant for a single user on Apple Silicon + FL Studio. Creative intent flows through a **BriefDocument** (constraint-first canvas) into a **canonical intermediate representation (CIR)** (`MusicProject`), then adapters apply or export that state. Phase 2 adds reference ingest, feature estimates, stem separation adapters (default simulation), and pitched-stem transcription adapters (default stub) with stem→role mapping and borrow chips. Phase 3 adds reference-conditioned multi-candidate generation, A/B (MIDI proxies), recipe apply, and lock-honoring revise. Phase 4 adds `render_eval` (technical + musical), critic → typed PatchOps, and a bounded revision loop with measured improvement + rollback — still simulation / fixtures. Neural audio dual-path is allowed by v1.1; CIR remains system of record.
+Local-first, reference-aware music production assistant for a single user on Apple Silicon + FL Studio. Creative intent flows through a **BriefDocument** (constraint-first canvas) into a **canonical intermediate representation (CIR)** (`MusicProject`), then adapters apply or export that state. Phase 2 adds reference ingest, feature estimates, stem separation adapters (default simulation), and pitched-stem transcription adapters (default stub) with stem→role mapping and borrow chips. Phase 3 adds reference-conditioned multi-candidate generation, A/B (MIDI proxies), recipe apply, and lock-honoring revise. Phase 4 adds `render_eval` (technical + musical), critic → typed PatchOps, and a bounded revision loop with measured improvement + rollback — still simulation / fixtures. Phase 5–6 add taste ranking and full-length arrangement. Phase 7 adds research hooks (`research/*`, multi-DAW registry) without downloading foundation models. Neural audio dual-path is allowed by v1.1; CIR remains system of record.
 
 ## High-level diagram
 
@@ -12,17 +12,18 @@ Local-first, reference-aware music production assistant for a single user on App
  CLI + Local FastAPI (`backend/app/api`) + Vite React UI (`frontend/`)
               |
   compose / full-compose / ref-pipeline / ref-compose / candidates / revise / ab / critique / revise-loop
-       |              |                |              |              |
-  conditioning   audio/*          storage         daw adapters   render_eval + critic
-  + generators   ingest/analyse   (SQLite +       FakeDaw |      (fixtures / CIR sim
-  brief/diff     separators/*     workspace/)     MidiExport |   → typed PatchOps)
-  coedit/patch   transcription/*                  PostFader*)
-  arrangement/*  (Phase 6 full-length)
-       \____________|________________|______________|______________/
+  research-status / research-eval / mix-heuristics / vocal-stub / list-daws
+       |              |                |              |              |              |
+  conditioning   audio/*          storage         daw registry   render_eval +   research/*
+  + specialist   ingest/analyse   (SQLite +       FakeDaw |      critic +        (MIDI specialist,
+  generators     separators/*     workspace/)     MidiExport |   action-effect   action-effect,
+  brief/diff     transcription/*                  + DAW stubs*)  outcomes        mix / vocal /
+  arrangement/*                                                  dual-path)
+       \____________|________________|______________|______________|______________/
          MusicProject (CIR) + ReferenceProfile + CandidatePackage + ArrangementPlan
 ```
 
-\* PostFader is **not** available in the cloud Linux VM; documented for the user's Mac only.  
+\* PostFader / Ableton / Logic / Reaper stubs refuse live control on Linux CI; Mac probe later.  
 \* `FixtureReferenceAnalyzer` remains available for Phase 3 demos without a live reference file.
 
 ## Domain modules (status)
@@ -35,14 +36,15 @@ Local-first, reference-aware music production assistant for a single user on App
 | `audio` | Ingest, analyse, stems + reference analyzer protocol/fixtures | **Phase 2** (sim) + Phase 3 fixtures |
 | `transcription` | Audio → MIDI | **Phase 2** (stub default) |
 | `music` | Theory, groove, generators, MIDI, brief, diff, coedit, conditioning, recipes, patch_apply | **Phase 1+3+4** |
-| `generation` | Symbolic / neural | Deterministic + borrow conditioning |
-| `taste` | Preference / ranking | PreferenceComparison on A/B; model later |
-| `daw` | DAW adapters | Fake + MIDI export (+ verify/undo) |
+| `generation` | Symbolic / neural | Deterministic + Phase 7 specialist hook |
+| `taste` | Preference / ranking | Pairwise + ranking head + style vectors |
+| `daw` | DAW adapters | Fake + MIDI export + **multi-DAW registry/stubs** |
 | `agents` | Critic / planner | **Eval-driven typed PatchOps** (≤3 next moves) |
 | `render_eval` | Bounce / mix analysis | **Technical + musical + fixtures** |
+| `research` | Phase 7 hooks | Specialist MIDI, action-effect, mix, vocal, dual-path, eval harness |
 | `assets` | Sample/VST manifest | Workspace paths |
-| `storage` | SQLite, versions, refs | Projects + versions + references + sessions + renders |
-| `ui` | React local UI (Vite/TS) | **Shipped** — Workspace / References / Candidates / Jobs / Settings |
+| `storage` | SQLite, versions, refs | Projects + versions + references + sessions + renders + research outcomes |
+| `ui` | React local UI (Vite/TS) | **Shipped** — Workspace / References / Candidates / Jobs / Settings (+ MIDI audition / cancel stubs) |
 
 ## Core data contracts
 

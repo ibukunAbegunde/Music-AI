@@ -83,6 +83,31 @@ MUSIC_AI_ALLOW_ENCODER_DOWNLOAD=false
 
 Settings field: `music_ai_allow_encoder_download` (reads `MUSIC_AI_ALLOW_ENCODER_DOWNLOAD`; also accepts bare `ALLOW_ENCODER_DOWNLOAD`). Do not flip the download flag in CI. Ranking-head training works on the simulation encoder; swap the encoder later without changing the head interface.
 
+## Phase 7 research
+
+Phase 7 ships **interfaces + honest stubs + eval harnesses**. No foundation models are
+downloaded or trained from scratch in-repo.
+
+| Capability | Default | Optional (refuses without flag) |
+|------------|---------|----------------------------------|
+| MIDI specialist | `DeterministicMidiSpecialist` (= Phase 1–6 generators) | `MIDI_SPECIALIST=optional` + `MUSIC_AI_ALLOW_SPECIALIST_DOWNLOAD=true` |
+| Vocal workflow | Guide-MIDI stub (`StubVocalWorkflow`) | `VOCAL_WORKFLOW=optional` + `MUSIC_AI_ALLOW_VOCAL_MODEL_DOWNLOAD=true` |
+| Action-effect | Heuristic over logged `RevisionOutcome` | Future trained model (user approval + licensed data) |
+| Advanced mix | CIR/sim heuristics | Live bounce metrics when PostFader probed |
+| Dual-path audio | Policy + side-artifact helper; CIR remains SoR | Neural texture/ideation models after approval |
+
+```
+MIDI_SPECIALIST=deterministic
+VOCAL_WORKFLOW=stub
+MUSIC_AI_ALLOW_SPECIALIST_DOWNLOAD=false
+MUSIC_AI_ALLOW_VOCAL_MODEL_DOWNLOAD=false
+```
+
+```bash
+music-ai research-status
+music-ai research-eval "mellow Afrobeats 110 BPM" --seed 42
+```
+
 ## Rights reminder
 
 Separated stems and transcribed MIDI from third-party references inherit rights

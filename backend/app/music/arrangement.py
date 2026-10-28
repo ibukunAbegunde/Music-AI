@@ -5,6 +5,7 @@ from __future__ import annotations
 from copy import deepcopy
 from random import Random
 
+from backend.app.core.config import Settings
 from backend.app.models.schemas import (
     ArrangementPlan,
     BriefDocument,
@@ -18,14 +19,16 @@ from backend.app.models.schemas import (
 from backend.app.music.brief import parse_brief
 from backend.app.music.coedit import add_end_fill
 from backend.app.music.conditioning import ConditioningPlan
-from backend.app.music.generators import generate_from_brief
 from backend.app.music.structure_templates import (
     get_structure_template,
     resolve_structure_id,
     validate_section_map,
 )
 from backend.app.music.theory import beats_per_bar
-
+from backend.app.research.midi_specialist import (
+    MidiSpecialistResult,
+    compose_cir_from_brief,
+)
 
 MIN_FULL_BARS = 32
 MAX_FULL_BARS = 256
@@ -115,8 +118,7 @@ def _rescale_section_map(
         else:
             start = cursor
             end = min(to_bars, start + new_len - 1)
-        if end < start:
-            end = start
+        end = max(end, start)
         out.append(
             SectionDraft(
                 name=sec.name,
@@ -234,15 +236,38 @@ def generate_arranged_project(
     name: str | None = None,
     plan_conditioning: ConditioningPlan | None = None,
     reference_ids: list | None = None,
+    settings: Settings | None = None,
 ) -> MusicProject:
     """Generate a full multi-section instrumental from an ArrangementPlan."""
+    return generate_arranged_with_specialist(
+        brief,
+        plan,
+        name=name,
+        plan_conditioning=plan_conditioning,
+        reference_ids=reference_ids,
+        settings=settings,
+    ).project
+
+
+def generate_arranged_with_specialist(
+    brief: BriefDocument,
+    plan: ArrangementPlan,
+    *,
+    name: str | None = None,
+    plan_conditioning: ConditioningPlan | None = None,
+    reference_ids: list | None = None,
+    settings: Settings | None = None,
+) -> MidiSpecialistResult:
+    """Same as ``generate_arranged_project`` but returns specialist audit metadata."""
     arranged_brief = apply_plan_to_brief(brief, plan)
-    project = generate_from_brief(
+    specialist = compose_cir_from_brief(
         arranged_brief,
+        settings=settings,
         name=name or f"{plan.genre_template_id}-full-{plan.length_bars}bars",
         plan=plan_conditioning,
         reference_ids=reference_ids,
     )
+    project = specialist.project
     project = _apply_section_intensity(
         project, plan.section_map, seed=int(arranged_brief.seed or 0)
     )
@@ -254,7 +279,16 @@ def generate_arranged_project(
     choruses = [s for s in plan.section_map if _section_kind(s.name) == "chorus"]
     if len(choruses) >= 2:
         project = add_end_fill(project, before_bar=choruses[-1].start_bar)
-    return project
+    notes = list(specialist.notes)
+    notes.append("Arrangement section intensity + fills applied after specialist CIR.")
+    return MidiSpecialistResult(
+        project=project,
+        specialist_name=specialist.specialist_name,
+        specialist_version=specialist.specialist_version,
+        mode=specialist.mode,
+        notes=notes,
+        cir_is_system_of_record=specialist.cir_is_system_of_record,
+    )
 
 
 def brief_for_full_compose(

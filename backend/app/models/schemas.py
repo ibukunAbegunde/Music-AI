@@ -586,6 +586,20 @@ class AuditionRequest(BaseModel):
     in_loop_context: bool = True
 
 
+class MidiAuditionStub(BaseModel):
+    """UI/API MIDI audition stub — paths + honest MIDI-proxy note (no audio decode)."""
+
+    project_id: UUID
+    version_id: UUID | None = None
+    midi_paths: dict[str, str] = Field(default_factory=dict)
+    normalization_status: str = "midi_proxy"
+    playable_in_ui: bool = False
+    note: str = (
+        "MIDI proxy only — no in-browser audio audition yet. "
+        "Open paths in a DAW / MIDI player, or use workspace/midi/<id>/."
+    )
+
+
 class AssetManifest(BaseModel):
     id: UUID = Field(default_factory=new_id)
     name: str

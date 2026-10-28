@@ -11,7 +11,7 @@ from uuid import UUID
 from backend.app.agents.critic import propose_next_moves
 from backend.app.core.config import DawMode, Settings, get_settings
 from backend.app.core.logging import log_event, setup_logging
-from backend.app.daw.base import DawAdapter, DawResult
+from backend.app.daw.base import DawAdapter, DawResult, ensure_daw_write_ok
 from backend.app.daw.fake import FakeDawAdapter
 from backend.app.daw.midi_fallback import MidiExportAdapter
 from backend.app.models.db import init_db
@@ -30,12 +30,13 @@ from backend.app.music.arrangement import (
     MAX_FULL_BARS,
     MIN_FULL_BARS,
     brief_for_full_compose,
-    generate_arranged_project,
+    generate_arranged_with_specialist,
     section_dicts_for_daw,
 )
 from backend.app.music.conditioning import ConditioningPlan, build_conditioning_plan
 from backend.app.music.diff import baseline_diff_summary
 from backend.app.music.midi import assert_project_span, export_project_midi
+from backend.app.research.midi_specialist import specialist_metadata
 from backend.app.services.compose import select_adapter
 from backend.app.storage.assets import AssetStore
 from backend.app.storage.repository import ProjectRepository
@@ -57,6 +58,8 @@ class FullComposeResult:
     snapshot_ref: str | None = None
     manual_steps: list[str] = field(default_factory=list)
     gated: bool = False  # True when Release mode blocked DAW write
+    specialist_name: str | None = None
+    specialist_mode: str | None = None
 
 
 def _manual_fl_steps(project: MusicProject, plan: ArrangementPlan, midi_dir: Path) -> list[str]:
@@ -103,13 +106,15 @@ def full_compose_from_brief(
     if plan.length_bars < MIN_FULL_BARS or plan.length_bars > MAX_FULL_BARS:
         raise ValueError(f"bars must be {MIN_FULL_BARS}–{MAX_FULL_BARS}")
 
-    project = generate_arranged_project(
+    specialist_result = generate_arranged_with_specialist(
         brief,
         plan,
         name=name,
         plan_conditioning=conditioning,
         reference_ids=reference_ids,
+        settings=settings,
     )
+    project = specialist_result.project
     project.brief_id = brief.id
     brief.project_id = project.id
     assert_project_span(project)
@@ -159,6 +164,7 @@ def full_compose_from_brief(
             snap = daw.save_snapshot("pre-full-compose")
             snapshot_ref = snap.observations.get("snapshot_ref")
         daw_result = daw.create_or_update_notes(project)
+        ensure_daw_write_ok(daw_result, context="full_compose")
         if isinstance(daw, FakeDawAdapter):
             daw.set_tempo(project.bpm)
             for sec in section_dicts_for_daw(project):
@@ -237,6 +243,7 @@ def full_compose_from_brief(
         next_moves = propose_next_moves(project)
 
     manual_steps = _manual_fl_steps(project, plan, midi_dir)
+    spec_meta = specialist_metadata(specialist_result)
     meta = {
         "phase": 6,
         "project_id": str(project.id),
@@ -261,6 +268,7 @@ def full_compose_from_brief(
         "gated": gated,
         "manual_fl_steps": manual_steps,
         "schema_version": project.schema_version,
+        **spec_meta,
     }
     metadata_path = assets.write_json(f"projects/{project.id}/metadata.json", meta)
     assets.write_json(f"projects/{project.id}/brief.json", brief.model_dump(mode="json"))
@@ -275,6 +283,7 @@ def full_compose_from_brief(
         bars=project.length_bars,
         sections=len(project.sections),
         gated=gated,
+        specialist_name=specialist_result.specialist_name,
     )
 
     return FullComposeResult(
@@ -292,6 +301,8 @@ def full_compose_from_brief(
         snapshot_ref=snapshot_ref,
         manual_steps=manual_steps,
         gated=gated,
+        specialist_name=specialist_result.specialist_name,
+        specialist_mode=specialist_result.mode,
     )
 
 

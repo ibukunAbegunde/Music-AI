@@ -39,12 +39,34 @@ def create_job_stub(body: JobCreateRequest) -> dict:
 
 @router.post("/{job_id}/cancel")
 def cancel_job(job_id: str) -> dict:
+    """Mark job cancelled in SQLite.
+
+    Stub: does **not** abort an in-flight compose/revise coroutine. Long routes
+    still run to completion; UI should label this as status-only cancel.
+    """
     repo = projects_repo()
     job = repo.get_job(job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="job not found")
     if job["status"] in ("completed", "failed", "cancelled"):
-        return job
-    updated = repo.update_job(job_id, status="cancelled", detail={**job["detail"], "cancelled": True})
+        return {
+            **job,
+            "cancel_stub": True,
+            "cancel_note": "Status-only cancel — in-flight work is not aborted.",
+        }
+    updated = repo.update_job(
+        job_id,
+        status="cancelled",
+        detail={
+            **job["detail"],
+            "cancelled": True,
+            "cancel_stub": True,
+            "cancel_note": "Status flipped in SQLite only; in-flight compose is not aborted.",
+        },
+    )
     assert updated is not None
-    return updated
+    return {
+        **updated,
+        "cancel_stub": True,
+        "cancel_note": "Status-only cancel — in-flight work is not aborted.",
+    }

@@ -10,6 +10,7 @@ from uuid import UUID
 from backend.app.agents.critic import propose_next_moves
 from backend.app.core.config import DawMode, Settings, get_settings
 from backend.app.core.logging import log_event, setup_logging
+from backend.app.daw.base import ensure_daw_write_ok
 from backend.app.daw.fake import FakeDawAdapter
 from backend.app.daw.midi_fallback import MidiExportAdapter
 from backend.app.models.db import init_db
@@ -32,8 +33,8 @@ from backend.app.music.conditioning import (
     build_conditioning_plan,
 )
 from backend.app.music.diff import baseline_diff_summary, diff_projects
-from backend.app.music.generators import generate_from_brief
 from backend.app.music.midi import assert_eight_bars_span, export_project_midi
+from backend.app.research.midi_specialist import compose_cir_from_brief
 from backend.app.services.compose import select_adapter
 from backend.app.storage.assets import AssetStore
 from backend.app.storage.repository import ProjectRepository
@@ -88,12 +89,13 @@ def _package_one(
 ) -> CandidateBundle:
     seeded = brief.model_copy(deep=True)
     seeded.seed = seed
-    project = generate_from_brief(
+    project = compose_cir_from_brief(
         seeded,
+        settings=settings,
         name=name or f"{seeded.genre_template_id}-c{index}",
         plan=plan,
         reference_ids=reference_ids,
-    )
+    ).project
     # Variations must share locked material from baseline (recipe / role-locks)
     if baseline_project is not None and brief.locked_roles:
         locked_base = apply_role_locks(baseline_project, brief.locked_roles)
@@ -115,6 +117,7 @@ def _package_one(
     daw = adapter
     daw.connect()
     daw_result = daw.create_or_update_notes(project)
+    ensure_daw_write_ok(daw_result, context=f"candidates[{index}]")
     if isinstance(daw, FakeDawAdapter):
         daw.set_tempo(project.bpm)
         daw.verify_postcondition({"bpm": project.bpm, "min_tracks": 3, "min_notes": 10})

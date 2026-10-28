@@ -143,4 +143,21 @@ export const api = {
 
   listJobs: () => request<JobRecord[]>('/api/jobs'),
   getJob: (id: string) => request<JobRecord>(`/api/jobs/${id}`),
+  cancelJob: (id: string) =>
+    request<JobRecord & { cancel_stub?: boolean; cancel_note?: string }>(
+      `/api/jobs/${id}/cancel`,
+      { method: 'POST' },
+    ),
+
+  midiAudition: (projectId: string) =>
+    request<{
+      project_id: string
+      version_id?: string | null
+      midi_paths: Record<string, string>
+      normalization_status: string
+      playable_in_ui: boolean
+      note: string
+    }>(`/api/projects/${projectId}/midi-audition`),
+
+  researchStatus: () => request<Record<string, unknown>>('/api/research/status'),
 }

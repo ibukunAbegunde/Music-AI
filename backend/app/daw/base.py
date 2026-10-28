@@ -31,6 +31,33 @@ class DawResult:
         }
 
 
+class DawWriteError(RuntimeError):
+    """Raised when a DAW write refused/failed and must not be buried under OK compose."""
+
+    def __init__(self, message: str, *, daw_result: DawResult) -> None:
+        super().__init__(message)
+        self.daw_result = daw_result
+
+
+def ensure_daw_write_ok(result: DawResult, *, context: str = "compose") -> None:
+    """Fail honestly when DAW write did not succeed (refuse stubs, real errors).
+
+    Intentional gates (e.g. full-compose release mode with ``observations.gate``)
+    are allowed to leave ``succeeded=False`` without raising.
+    """
+    if result.succeeded:
+        return
+    if result.observations.get("gate"):
+        return
+    detail = result.error or result.user_action_required or "DAW write did not succeed"
+    raise DawWriteError(
+        f"DAW write failed during {context}: {detail}. "
+        "Use DAW_MODE=simulation or midi_export until a live adapter is probed "
+        "(see .env.example / docs/setup-macos-fl-studio.md).",
+        daw_result=result,
+    )
+
+
 class DawAdapter(ABC):
     name: str = "base"
 

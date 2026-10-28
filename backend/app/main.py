@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.app.api import jobs, projects, references
+from backend.app.api import jobs, projects, references, research
 from backend.app.api.schemas import HealthResponse, SettingsResponse
 from backend.app.core.config import get_settings
 from backend.app.core.doctor import run_doctor
@@ -24,8 +24,8 @@ async def lifespan(_app: FastAPI):
 
 app = FastAPI(
     title="Music AI Local API",
-    version="0.5.0",
-    description="Phase-adjacent HTTP surface over existing compose / reference / jobs services.",
+    version="0.7.0",
+    description="Phase 0–7 HTTP surface over compose / reference / jobs / research stubs.",
     lifespan=lifespan,
 )
 
@@ -45,6 +45,7 @@ app.add_middleware(
 app.include_router(projects.router)
 app.include_router(references.router)
 app.include_router(jobs.router)
+app.include_router(research.router)
 
 
 @app.get("/api/health", response_model=HealthResponse)
