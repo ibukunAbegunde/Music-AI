@@ -67,6 +67,22 @@ pip install -e ".[librosa]"
 
 Used only when `Settings.prefer_librosa` is true; numpy path remains default.
 
+## Phase 5 taste encoder (default = simulation)
+
+Taste ranking uses a **frozen encoder** interface. Default:
+
+| Encoder | Behavior |
+|---------|----------|
+| `simulation_cir_projection` | Deterministic projection of CIR musical features — always available, no download |
+| optional CLAP/MERT | **Refuses** unless `MUSIC_AI_ALLOW_ENCODER_DOWNLOAD=true` and a future adapter is installed |
+
+```
+TASTE_ENCODER=simulation
+MUSIC_AI_ALLOW_ENCODER_DOWNLOAD=false
+```
+
+Settings field: `music_ai_allow_encoder_download` (reads `MUSIC_AI_ALLOW_ENCODER_DOWNLOAD`; also accepts bare `ALLOW_ENCODER_DOWNLOAD`). Do not flip the download flag in CI. Ranking-head training works on the simulation encoder; swap the encoder later without changing the head interface.
+
 ## Rights reminder
 
 Separated stems and transcribed MIDI from third-party references inherit rights

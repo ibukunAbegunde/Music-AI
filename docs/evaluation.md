@@ -7,7 +7,7 @@ Simulation-first render evaluation and typed critic patches. Live bounce metrics
 1. **Technical** — clipping, silence, loudness vs −14 LUFS target, excess sub, stereo imbalance, hot velocity proxy.
 2. **Musical** — empty roles, density, kick/bass overlap, groove grid error, end-of-loop fill.
 3. **Brief/reference fit** — partial via musical heuristics + conditioning notes; dedicated fit scorer deferred.
-4. **Personal preference** — deferred (Phase 5).
+4. **Personal preference** — Phase 5 (`backend/app/taste/`): pairwise dataset, retrieval baseline, frozen-encoder ranking head, holdout-by-project eval. Never mixed into technical/musical scoreboards as ground truth.
 
 Each dimension yields separate `Evaluation` rows (`technical.*` / `musical.*`). `Scoreboard` keeps `technical` and `musical` aggregates distinct.
 
@@ -41,3 +41,19 @@ CLI: `music-ai critique`, `music-ai revise-loop`, `music-ai restore`.
 - `hot_clipping` — peaks / hot velocity → `soften_velocity`
 - `muddy_sub` — excess sub + kick/bass stack → soften / nudge; missing end fill
 - `healthy_loop` — clean baseline
+
+## Phase 5 taste eval
+
+```
+taste-simulate → pairwise dataset
+  → train logistic head on frozen sim encoder embeds (train projects only)
+  → holdout by project_id vs retrieval NN + random
+  → activate in registry only if holdout beats retrieval
+  → rollback via taste-rollback
+```
+
+CLI: `music-ai taste-simulate`, `taste-train`, `taste-eval`, `taste-registry`, `taste-rollback`, `taste-profile`.
+
+Calibration: reliability bins on holdout `P(B>A)`. Do **not** promise >70% pairwise accuracy.
+
+Encoder: default `SimulationFrozenEncoder` (CIR feature projection). Optional pretrained audio encoder refuses without `MUSIC_AI_ALLOW_ENCODER_DOWNLOAD=true`.

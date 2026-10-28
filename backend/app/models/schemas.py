@@ -409,6 +409,65 @@ class PreferenceComparison(BaseModel):
     timestamp: datetime = Field(default_factory=utcnow)
     confidence: float | None = None
     blind_status: bool = True
+    # Phase 5: explicit project/version linkage for holdout-by-project splits
+    project_id: UUID | None = None
+    version_a_id: UUID | None = None
+    version_b_id: UUID | None = None
+    feature_a_ref: str | None = None
+    feature_b_ref: str | None = None
+
+
+class StyleVector(BaseModel):
+    """Compact style embedding derived from an approved project/recipe (Phase 5)."""
+
+    id: UUID = Field(default_factory=new_id)
+    source_kind: str  # recipe | project
+    source_id: UUID
+    project_id: UUID | None = None
+    genre_tags: list[str] = Field(default_factory=list)
+    dim: int
+    values: list[float]
+    encoder_name: str
+    encoder_version: str
+    created_at: datetime = Field(default_factory=utcnow)
+    approved_only: bool = True
+
+
+class TasteModelCheckpoint(BaseModel):
+    """Versioned ranking-head checkpoint in the taste model registry."""
+
+    id: UUID = Field(default_factory=new_id)
+    name: str
+    version: str
+    created_at: datetime = Field(default_factory=utcnow)
+    encoder_name: str
+    encoder_version: str
+    head_kind: str = "pairwise_logistic"
+    feature_dim: int
+    weights: list[float] = Field(default_factory=list)
+    bias: float = 0.0
+    train_metrics: dict[str, Any] = Field(default_factory=dict)
+    holdout_metrics: dict[str, Any] = Field(default_factory=dict)
+    baseline_metrics: dict[str, Any] = Field(default_factory=dict)
+    better_than_baseline: bool = False
+    active: bool = False
+    notes: str | None = None
+    parent_checkpoint_id: UUID | None = None
+
+
+class TasteProfileSummary(BaseModel):
+    """Transparent taste profile — no invented preferences."""
+
+    n_comparisons: int = 0
+    n_decisive: int = 0  # a|b only
+    n_journal_entries: int = 0
+    n_style_vectors: int = 0
+    preferred_tags: dict[str, int] = Field(default_factory=dict)
+    genre_counts: dict[str, int] = Field(default_factory=dict)
+    active_model_id: UUID | None = None
+    active_model_version: str | None = None
+    prediction_confidence: float | None = None
+    limitations: list[str] = Field(default_factory=list)
 
 
 class Evaluation(BaseModel):

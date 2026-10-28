@@ -1,11 +1,12 @@
 # Private AI Music Producer
 
-Local-first AI music production assistant. **Spec v1.1** — constraint-first briefs, role-locks, musical diffs, candidate packaging, **reference → stems → MIDI** pipeline, reference-conditioned loops, **eval-driven critic → typed PatchOps**. CIR/MIDI is the system of record; neural audio dual-path is allowed later without delaying models for product reasons.
+Local-first AI music production assistant. **Spec v1.1** — constraint-first briefs, role-locks, musical diffs, candidate packaging, **reference → stems → MIDI** pipeline, reference-conditioned loops, **eval-driven critic → typed PatchOps**, **personal taste ranking**. CIR/MIDI is the system of record; neural audio dual-path is allowed later without delaying models for product reasons.
 
-> Phase 0–4 (simulation / MIDI manual-import / render fixtures). No live FL Studio claimed on Linux CI.  
-> Default stems + transcription are **simulated/stub** — no large model downloads.  
+> Phase 0–5 (simulation / MIDI manual-import / render fixtures / taste sim encoder). No live FL Studio claimed on Linux CI.  
+> Default stems + transcription + taste encoder are **simulated/stub** — no large model downloads.  
 > Phase 3 can use fixture `ReferenceProfile` adapters or real Phase 2 profiles.  
-> Phase 4 critic uses CIR simulation + optional render fixtures (`--fixture`).
+> Phase 4 critic uses CIR simulation + optional render fixtures (`--fixture`).  
+> Phase 5 ranking head trains on frozen sim embeds; activates only if holdout beats retrieval.
 
 ## Requirements
 
@@ -74,10 +75,32 @@ music-ai recipe-apply <recipe-id> --n 2 --seed 11
 
 Outputs under `workspace/midi/<id>/`, `workspace/projects/<id>/` (metadata, brief, CIR, candidates, A/B, diffs), and `workspace/renders/<id>/`.
 
+### Phase 5 demo (personal taste)
+
+```bash
+music-ai taste-simulate --n-projects 8 --pairs 4
+music-ai taste-train          # activates only if holdout > retrieval
+music-ai taste-eval
+music-ai taste-registry
+music-ai taste-profile
+music-ai journal-add <project-id> "liked the bass" --rating 4 --tag bass
+# after recipe-save --approved path / approved recipes:
+music-ai style-vectors
+music-ai taste-rollback       # previous checkpoint
+```
+
+A/B choices also land in the taste dataset:
+
+```bash
+music-ai compose "Afrobeats 110 BPM" --seed 42 --n 2
+music-ai ab <project-id> --choice b --reason "prefer B bass"
+```
+
 ### Tests
 
 ```bash
 pytest
+pytest tests/unit/test_taste_*.py tests/integration/test_phase5_taste.py
 ```
 
 ## What's implemented
