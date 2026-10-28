@@ -2,23 +2,23 @@
 
 Date: 2026-10-28  
 Branch: `cursor/phase-3-ref-conditioned-b20d`  
-Base: `main` (Phase 0–1 merged)  
+Base: `main` @ `24a3869` (Phase 0–2 merged; rebased)  
 Host: Ubuntu cloud VM — FL Studio / PostFader / IAC = **N/A**
 
 ## Verdict
 
-Phase 3 **simulation exit met**. Reference (fixture `ReferenceProfile`) → borrow-chip conditioning → novel **8–16 bar** MIDI as **N CandidatePackages** (seed + CIR + loudness notes + one-line diff) → **A/B via MIDI preview proxies** + musical diff → **`keep drums, replace bass`** revision with locks verified → recipe apply + version timeline. **Phase 2 not on main** — adapters/schemas first; fixture analyzer stands in. Live audio render not claimed.
+Phase 3 **simulation exit met**. Reference (fixture or Phase 2 `ReferenceProfile`) → borrow-chip conditioning (`BorrowTrait`-aligned) → novel **8–16 bar** MIDI as **N CandidatePackages** (seed + CIR + loudness notes + one-line diff) → **A/B via MIDI preview proxies** + musical diff → **`keep drums, replace bass`** revision with locks verified → recipe apply + version timeline. Fixture analyzer remains for demos without a live file. Live audio render not claimed.
 
 ## Phase 2 dependency
 
 | Item | Status |
 |------|--------|
-| `ReferenceProfile` / `ReferenceAsset` / `BorrowChip` schemas | Shared (Phase 1+); Phase 3 consumes |
-| `ReferenceAnalyzer` protocol + `FixtureReferenceAnalyzer` | Phase 3 stub |
-| Real import → separate → analyse → embeddings | **Waiting on Phase 2 PR** — rebase/wire when present |
-| Stem → role → lock UX | Deferred to Phase 2; Phase 3 enforces locks in revise/candidates |
+| `ReferenceProfile` / `ReferenceAsset` / `BorrowTrait` / `BorrowChip` | On `main` (Phase 2); Phase 3 conditions on chips |
+| `ReferenceAnalyzer` protocol + `FixtureReferenceAnalyzer` | Phase 3 stub (real pipeline via `ref-pipeline`) |
+| Real import → separate → analyse | ✅ Phase 2 on `main` (sim stems / stub transcription) |
+| Stem → role → lock UX | ✅ Phase 2; Phase 3 enforces locks in revise/candidates |
 
-Documented on CLI (`ref-compose` Phase 2 note) and in candidate session JSON (`phase2_dependency`).
+Borrow-trait aliases (`chord_feel`→`chords`, `groove_swing`→`groove`, `energy_curve`→`energy`) normalize onto Phase 2 `BorrowTrait`.
 
 ## What is real
 
@@ -38,7 +38,7 @@ Documented on CLI (`ref-compose` Phase 2 note) and in candidate session JSON (`p
 
 | Item | Notes |
 |------|-------|
-| Live reference DSP / stems | Fixture profiles only |
+| Live reference DSP / stems | Fixture default on `ref-compose`; real Phase 2 pipeline via `ref-pipeline` |
 | Loudness-normalized WAV bounce | `loudness_notes` + `midi_proxy` status |
 | Neural audio dual-path | Allowed by v1.1; not installed |
 | React brief / A-B UI | CLI surfaces |
