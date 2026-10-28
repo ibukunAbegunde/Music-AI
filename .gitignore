@@ -1,0 +1,50 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+.eggs/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Environment / secrets
+.env
+.env.local
+*.pem
+credentials.json
+
+# Local workspace (audio, MIDI exports, DB, logs, models)
+workspace/*
+!workspace/.gitkeep
+
+# IDE / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# User audio / DAW / credentials — never commit
+*.wav
+*.mp3
+*.flac
+*.m4a
+*.aiff
+*.flp
+*.als
+*.logicx
+
+# Keep committed fixtures that are intentionally tiny MIDI
+!tests/fixtures/**/*.mid
+!tests/**/*.mid
