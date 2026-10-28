@@ -64,6 +64,23 @@ class JobRecord(Base):
     )
 
 
+class ReferenceRecord(Base):
+    __tablename__ = "references"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    original_filename: Mapped[str] = mapped_column(String(512), nullable=False)
+    license_class: Mapped[str] = mapped_column(String(32), default="unknown")
+    use_mode: Mapped[str] = mapped_column(String(32), default="analysis")
+    analysis_status: Mapped[str] = mapped_column(String(32), default="pending")
+    payload_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    profile_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+    )
+
+
 def make_engine(settings: Settings | None = None):
     settings = settings or get_settings()
     settings.ensure_workspace()

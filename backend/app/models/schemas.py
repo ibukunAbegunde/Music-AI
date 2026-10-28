@@ -45,6 +45,39 @@ class TrackRole(str, Enum):
     DRUMS = "drums"
 
 
+class BorrowTrait(str, Enum):
+    """Selectable reference traits for brief borrow chips (v1.1)."""
+
+    BASS_BOUNCE = "bass_bounce"
+    DRUMS = "drums"
+    PERCUSSION_TEXTURE = "percussion_texture"
+    ATMOSPHERE = "atmosphere"
+    CHORDS = "chords"
+    ARRANGEMENT = "arrangement"
+    BASS_RHYTHM = "bass_rhythm"
+    GROOVE = "groove"
+    ENERGY = "energy"
+
+
+# Default stem_type → TrackRole mapping for stem→role UX
+STEM_TYPE_TO_ROLE: dict[str, TrackRole] = {
+    "vocals": TrackRole.VOCAL,
+    "drums": TrackRole.DRUMS,
+    "bass": TrackRole.BASS,
+    "other": TrackRole.OTHER,
+}
+
+
+class StemRoleMapping(BaseModel):
+    """Stem → track role (+ optional role-lock) for Phase 2 UX."""
+
+    stem_id: UUID
+    stem_type: str
+    role: TrackRole
+    locked: bool = False
+    lock_reason: str | None = None
+
+
 class ProjectStatus(str, Enum):
     CREATED = "CREATED"
     PLANNED = "PLANNED"
@@ -82,7 +115,7 @@ class BarRange(BaseModel):
 
 class BorrowChip(BaseModel):
     reference_id: UUID | None = None
-    trait: str
+    trait: str  # prefer BorrowTrait values; free-form allowed for forward compat
     weight: float = Field(default=1.0, ge=0, le=1)
 
 
@@ -197,11 +230,15 @@ class ReferenceAsset(BaseModel):
     duration_sec: float | None = None
     sample_rate: int | None = None
     channels: int | None = None
-    analysis_status: str = "pending"
+    analysis_status: str = "pending"  # pending | analysed | separated | transcribed | failed
     stem_ids: list[UUID] = Field(default_factory=list)
     feature_profile_id: UUID | None = None
     embedding_ids: list[UUID] = Field(default_factory=list)
     lineage: dict[str, Any] = Field(default_factory=dict)
+    analysis_wav_path: str | None = None
+    available_borrow_traits: list[str] = Field(default_factory=list)
+    stem_role_mappings: list[StemRoleMapping] = Field(default_factory=list)
+    schema_version: str = "0.3.0"
 
 
 class GrooveFeatures(BaseModel):
@@ -209,10 +246,13 @@ class GrooveFeatures(BaseModel):
     microtiming_offsets: list[float] = Field(default_factory=list)
     syncopation: float | None = None
     swing_estimate: float | None = None
+    onset_density: float | None = None
+    beat_strength: float | None = None
 
 
 class ReferenceProfile(BaseModel):
     id: UUID = Field(default_factory=new_id)
+    reference_id: UUID | None = None
     bpm_estimate: float | None = None
     bpm_confidence: float | None = None
     meter: str | None = None
@@ -230,6 +270,11 @@ class ReferenceProfile(BaseModel):
     mix_metrics: dict[str, Any] = Field(default_factory=dict)
     embedding_refs: list[UUID] = Field(default_factory=list)
     analyst_versions: dict[str, str] = Field(default_factory=dict)
+    available_borrow_traits: list[str] = Field(default_factory=list)
+    stem_role_mappings: list[StemRoleMapping] = Field(default_factory=list)
+    transcription_summary: dict[str, Any] = Field(default_factory=dict)
+    limitations: list[str] = Field(default_factory=list)
+    is_estimate: bool = True  # all Phase 2 DSP outputs are marked estimates
 
 
 class StemAsset(BaseModel):
@@ -243,6 +288,10 @@ class StemAsset(BaseModel):
     bleed_notes: str | None = None
     original_mix_start_time: float = 0.0
     lineage: dict[str, Any] = Field(default_factory=dict)
+    mapped_role: TrackRole | None = None
+    role_locked: bool = False
+    transcription_midi_path: str | None = None
+    note_events: list[NoteEvent] = Field(default_factory=list)
 
 
 class BriefDocument(BaseModel):

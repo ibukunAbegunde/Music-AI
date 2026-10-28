@@ -1,4 +1,4 @@
-"""CLI entrypoint: music-ai compose / revise / brief / doctor / probe."""
+"""CLI entrypoint: music-ai compose / revise / reference pipeline / doctor."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ from backend.app.services.revise import revise_project
 from backend.app.storage.assets import AssetStore
 
 app = typer.Typer(
-    help="Private AI Music Producer — Phase 1 CLI (brief canvas + MIDI)",
+    help="Private AI Music Producer — Phase 2 CLI (references + brief + MIDI)",
     no_args_is_help=True,
 )
 console = Console()
@@ -227,6 +227,212 @@ def recipe_list(workspace: Path | None = typer.Option(None)) -> None:
             ", ".join(r.locked_roles) or "—",
         )
     console.print(table)
+
+
+@app.command("import-ref")
+def import_ref(
+    path: Path = typer.Argument(..., help="WAV/MP3/FLAC/M4A reference file"),
+    license_class: str = typer.Option("unknown", help="owned | licensed | unknown"),
+    use_mode: str = typer.Option("analysis", help="inspiration | analysis | direct-sample"),
+    notes: str | None = typer.Option(None, help="Permission / rights notes"),
+    workspace: Path | None = typer.Option(None),
+) -> None:
+    """Import a reference into the immutable workspace store (hash + rights)."""
+    from backend.app.services.reference import run_import
+
+    settings = _settings(None, workspace)
+    setup_logging(settings.log_level)
+    asset = run_import(
+        path,
+        settings=settings,
+        license_class=license_class,
+        permission_notes=notes,
+        use_mode=use_mode,
+    )
+    console.print(f"[bold green]Reference[/] {asset.id}")
+    console.print(f"  file: {asset.original_filename}")
+    console.print(f"  sha256: {asset.immutable_sha256[:16]}…")
+    console.print(f"  license: {asset.license_class.value}  use: {asset.use_mode.value}")
+    console.print(f"  duration: {asset.duration_sec:.2f}s  sr: {asset.sample_rate}")
+    console.print(f"  store: {asset.source_uri_or_local_path}")
+
+
+@app.command()
+def analyse(
+    reference_id: str = typer.Argument(..., help="Reference UUID"),
+    workspace: Path | None = typer.Option(None),
+) -> None:
+    """Estimate BPM/key/groove for an imported reference (marked as estimates)."""
+    from backend.app.services.reference import run_analyse
+
+    settings = _settings(None, workspace)
+    setup_logging(settings.log_level)
+    asset, profile = run_analyse(UUID(reference_id), settings=settings)
+    console.print(f"[bold green]Analysed[/] {asset.id}")
+    console.print(
+        f"  BPM: {profile.bpm_estimate} (conf {profile.bpm_confidence})  "
+        f"key: {profile.key_estimate} (conf {profile.key_confidence})"
+    )
+    gf = profile.groove_features
+    console.print(
+        f"  groove: swing≈{gf.swing_estimate} sync≈{gf.syncopation} "
+        f"onsets={len(gf.onset_grid)} density={gf.onset_density}"
+    )
+    console.print(f"  limitations: {profile.limitations[0] if profile.limitations else '—'}")
+
+
+@app.command()
+def separate(
+    reference_id: str = typer.Argument(..., help="Reference UUID"),
+    separator: str | None = typer.Option(None, help="simulation (default) | demucs"),
+    workspace: Path | None = typer.Option(None),
+) -> None:
+    """Separate stems (default: simulation band-split; Demucs optional/manual)."""
+    from backend.app.services.reference import run_separate
+
+    settings = _settings(None, workspace)
+    setup_logging(settings.log_level)
+    asset, stems, _profile = run_separate(
+        UUID(reference_id), settings=settings, separator_name=separator
+    )
+    console.print(f"[bold green]Separated[/] {asset.id} → {len(stems)} stems")
+    table = Table(title="Stems")
+    table.add_column("Type")
+    table.add_column("Role")
+    table.add_column("Model")
+    table.add_column("Path")
+    table.add_column("Flags")
+    for s in stems:
+        table.add_row(
+            s.stem_type,
+            (s.mapped_role.value if s.mapped_role else "—"),
+            f"{s.separation_model}@{s.separation_version}",
+            s.file_path,
+            ",".join(s.confidence_or_quality_flags) or "—",
+        )
+    console.print(table)
+    if stems and stems[0].bleed_notes:
+        console.print(f"[yellow]Note:[/] {stems[0].bleed_notes}")
+
+
+@app.command()
+def transcribe(
+    reference_id: str = typer.Argument(..., help="Reference UUID"),
+    stem: str = typer.Option("bass", help="Stem type to transcribe"),
+    transcriber: str | None = typer.Option(None, help="stub (default) | basic_pitch"),
+    lock: bool = typer.Option(False, help="Role-lock the mapped track after transcription"),
+    workspace: Path | None = typer.Option(None),
+) -> None:
+    """Transcribe a pitched stem → editable MIDI candidate."""
+    from backend.app.services.reference import run_transcribe
+
+    settings = _settings(None, workspace)
+    setup_logging(settings.log_level)
+    asset, stem_asset, notes, midi_path = run_transcribe(
+        UUID(reference_id),
+        stem_type=stem,
+        settings=settings,
+        transcriber_name=transcriber,
+        lock_role=lock,
+    )
+    console.print(f"[bold green]Transcribed[/] {asset.id} / {stem_asset.stem_type}")
+    console.print(f"  notes: {len(notes)}  role: {stem_asset.mapped_role}  locked: {stem_asset.role_locked}")
+    console.print(f"  midi: {midi_path}")
+    if notes:
+        preview = ", ".join(f"p{n.pitch}@{n.onset_beats:.2f}" for n in notes[:8])
+        console.print(f"  preview: {preview}{'…' if len(notes) > 8 else ''}")
+
+
+@app.command()
+def profile(
+    reference_id: str = typer.Argument(..., help="Reference UUID"),
+    workspace: Path | None = typer.Option(None),
+) -> None:
+    """Show reference profile + tempo/groove summary + stem→role map + borrows."""
+    from backend.app.audio.ingest import load_reference_asset
+    from backend.app.services.reference import load_profile
+
+    settings = _settings(None, workspace)
+    asset = load_reference_asset(UUID(reference_id), settings)
+    prof = load_profile(UUID(reference_id), settings)
+    console.print(f"[bold green]Profile[/] {asset.id}  status={asset.analysis_status}")
+    console.print(f"  file: {asset.original_filename}  rights: {asset.license_class.value}")
+    console.print(
+        f"  BPM≈{prof.bpm_estimate} (c={prof.bpm_confidence})  "
+        f"key≈{prof.key_estimate} (c={prof.key_confidence})  meter={prof.meter}"
+    )
+    gf = prof.groove_features
+    console.print(
+        f"  groove: swing≈{gf.swing_estimate} sync≈{gf.syncopation} "
+        f"density≈{gf.onset_density} onsets={len(gf.onset_grid)}"
+    )
+    console.print(f"  borrow traits: {', '.join(prof.available_borrow_traits)}")
+    if prof.transcription_summary:
+        console.print(f"  transcription: {prof.transcription_summary}")
+    if asset.stem_role_mappings:
+        table = Table(title="Stem → role")
+        table.add_column("Stem")
+        table.add_column("Role")
+        table.add_column("Locked")
+        for m in asset.stem_role_mappings:
+            table.add_row(m.stem_type, m.role.value, "yes" if m.locked else "no")
+        console.print(table)
+    if prof.limitations:
+        console.print("[yellow]Limitations:[/]")
+        for lim in prof.limitations:
+            console.print(f"  - {lim}")
+
+
+@app.command("ref-pipeline")
+def ref_pipeline(
+    path: Path = typer.Argument(..., help="Reference audio file"),
+    license_class: str = typer.Option("owned"),
+    use_mode: str = typer.Option("analysis"),
+    separator: str | None = typer.Option(None, help="simulation | demucs"),
+    transcriber: str | None = typer.Option(None, help="stub | basic_pitch"),
+    borrow: list[str] | None = typer.Option(
+        None, help="Borrow traits (repeatable), e.g. bass_bounce"
+    ),
+    lock_bass: bool = typer.Option(False, help="Role-lock transcribed bass"),
+    prompt: str | None = typer.Option(None, help="Optional NL brief to attach borrows to"),
+    workspace: Path | None = typer.Option(None),
+) -> None:
+    """Run import → analyse → separate → transcribe → show profile (Phase 2 exit)."""
+    from backend.app.services.reference import run_pipeline
+
+    settings = _settings(None, workspace)
+    setup_logging(settings.log_level)
+    result = run_pipeline(
+        path,
+        settings=settings,
+        license_class=license_class,
+        use_mode=use_mode,
+        separator_name=separator,
+        transcriber_name=transcriber,
+        borrow_traits=list(borrow) if borrow else None,
+        lock_bass=lock_bass,
+        prompt_for_brief=prompt,
+    )
+    console.print(f"[bold green]Pipeline complete[/] reference={result.asset.id}")
+    console.print(
+        f"  BPM≈{result.profile.bpm_estimate}  key≈{result.profile.key_estimate}  "
+        f"stems={len(result.stems)}  midi_notes={len(result.transcription_notes)}"
+    )
+    console.print(f"  midi: {result.transcription_midi}")
+    console.print(
+        f"  simulated: separator={result.simulated.get('separator')} "
+        f"transcriber={result.simulated.get('transcriber')}"
+    )
+    if result.brief_with_borrows:
+        chips = result.brief_with_borrows.borrow_chips
+        console.print(
+            f"  borrow chips: {', '.join(f'{c.trait}@{c.weight}' for c in chips)}"
+        )
+    gf = result.profile.groove_features
+    console.print(
+        f"  groove summary: swing≈{gf.swing_estimate} sync≈{gf.syncopation} "
+        f"onsets={len(gf.onset_grid)}"
+    )
 
 
 @app.command()

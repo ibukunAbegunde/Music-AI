@@ -45,6 +45,8 @@ workspace/*
 *.als
 *.logicx
 
-# Keep committed fixtures that are intentionally tiny MIDI
+# Keep committed fixtures that are intentionally tiny MIDI / WAV
 !tests/fixtures/**/*.mid
 !tests/**/*.mid
+!tests/fixtures/**/*.wav
+!tests/**/*.wav

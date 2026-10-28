@@ -25,6 +25,16 @@ class AssetStore:
         path.mkdir(parents=True, exist_ok=True)
         return path
 
+    def reference_dir(self, reference_id: UUID) -> Path:
+        path = self.root / "references" / str(reference_id)
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    def stems_dir(self, reference_id: UUID) -> Path:
+        path = self.root / "stems" / str(reference_id)
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
     def write_json(self, relative: str, data: dict) -> Path:
         path = self.root / relative
         path.parent.mkdir(parents=True, exist_ok=True)

@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ai-music-producer"
-version = "0.1.0"
-description = "Private local-first AI music producer — Phase 1 (brief canvas + MIDI)"
+version = "0.2.0"
+description = "Private local-first AI music producer — Phase 2 (references + MIDI)"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "Proprietary — personal use" }
@@ -18,6 +18,7 @@ dependencies = [
   "python-dotenv>=1.0",
   "typer>=0.12",
   "rich>=13.7",
+  "numpy>=1.26",
 ]
 
 [project.optional-dependencies]
@@ -26,6 +27,12 @@ dev = [
   "pytest-cov>=5.0",
   "ruff>=0.4",
 ]
+# Optional heavy audio stacks — do NOT install in CI without approval.
+# See docs/audio-models.md for enablement steps.
+librosa = ["librosa>=0.10"]
+demucs = ["demucs>=4.0"]
+basic-pitch = ["basic-pitch>=0.3"]
+audio-full = ["librosa>=0.10", "demucs>=4.0", "basic-pitch>=0.3"]
 
 [project.scripts]
 music-ai = "backend.app.cli:app"
