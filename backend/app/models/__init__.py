@@ -1,9 +1,12 @@
 """Domain schemas and persistence models."""
 
 from backend.app.models.schemas import (
+    STEM_TYPE_TO_ROLE,
     AssetManifest,
     AuditionRequest,
     AutonomyPolicy,
+    BorrowChip,
+    BorrowTrait,
     BriefDocument,
     CandidatePackage,
     DawOperation,
@@ -29,14 +32,18 @@ from backend.app.models.schemas import (
     RightsPolicy,
     Section,
     StemAsset,
+    StemRoleMapping,
     TrackRole,
     UseMode,
 )
 
 __all__ = [
+    "STEM_TYPE_TO_ROLE",
     "AssetManifest",
     "AuditionRequest",
     "AutonomyPolicy",
+    "BorrowChip",
+    "BorrowTrait",
     "BriefDocument",
     "CandidatePackage",
     "DawOperation",
@@ -62,6 +69,7 @@ __all__ = [
     "RightsPolicy",
     "Section",
     "StemAsset",
+    "StemRoleMapping",
     "TrackRole",
     "UseMode",
 ]

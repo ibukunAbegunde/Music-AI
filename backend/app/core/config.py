@@ -33,10 +33,14 @@ class Settings(BaseSettings):
     allow_cloud_llm: bool = False
     fl_studio_path: str | None = None
     postfader_path: str | None = None
-    schema_version: str = Field(default="0.1.0", description="Domain schema version")
+    schema_version: str = Field(default="0.3.0", description="Domain schema version")
+    # Phase 2 audio adapters — defaults stay simulation/stub (no large downloads)
+    music_ai_separator: str = "simulation"
+    music_ai_transcriber: str = "stub"
+    prefer_librosa: bool = False
 
     def ensure_workspace(self) -> Path:
-        """Create workspace subdirectories used by Phase 0."""
+        """Create workspace subdirectories used by Phase 0–2."""
         root = self.workspace_dir
         for sub in (
             "projects",
@@ -44,8 +48,10 @@ class Settings(BaseSettings):
             "renders",
             "stems",
             "references",
+            "references/by_hash",
             "logs",
             "snapshots",
+            "models",
         ):
             (root / sub).mkdir(parents=True, exist_ok=True)
         return root
