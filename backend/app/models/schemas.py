@@ -333,6 +333,38 @@ class GenreTemplate(BaseModel):
     notes: str | None = None
 
 
+class StructureTemplate(BaseModel):
+    """Full-song arrangement skeleton (Phase 6) — multi-section map + palette hints."""
+
+    id: str
+    name: str
+    genre_template_id: str
+    length_bars: int = Field(ge=16)
+    section_map: list[SectionDraft] = Field(default_factory=list)
+    instrument_palette: dict[str, str] = Field(
+        default_factory=dict,
+        description="role → suggested instrument / preset label (hint only)",
+    )
+    notes: str | None = None
+
+
+class ArrangementPlan(BaseModel):
+    """Concrete plan produced before full-length generation."""
+
+    id: UUID = Field(default_factory=new_id)
+    structure_template_id: str
+    genre_template_id: str
+    length_bars: int
+    section_map: list[SectionDraft] = Field(default_factory=list)
+    instrument_palette: dict[str, str] = Field(default_factory=dict)
+    energy_curve: list[EnergyPoint] = Field(default_factory=list)
+    scratch_or_release: str = "scratch"
+    autonomy_mode: str = "collaborative"
+    approvals_required: list[str] = Field(default_factory=list)
+    manual_fl_steps_ref: str = "docs/setup-macos-fl-studio.md#phase-6-full-length-import"
+    notes: list[str] = Field(default_factory=list)
+
+
 class Recipe(BaseModel):
     id: UUID = Field(default_factory=new_id)
     name: str
@@ -361,6 +393,7 @@ class ProductionPlan(BaseModel):
     estimated_cost: dict[str, Any] = Field(default_factory=dict)
     approvals_required: list[str] = Field(default_factory=list)
     status: str = "draft"
+    arrangement_plan_id: UUID | None = None
 
 
 class DawOperation(BaseModel):

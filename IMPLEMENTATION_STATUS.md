@@ -2,7 +2,7 @@
 
 Last updated: 2026-10-28  
 Spec: **v1.1** (Agent Store)  
-Current phase: **Phase 5 — Personal taste model (simulation)**
+Current phase: **Phase 6 — Autonomous full-length (simulation / MIDI)**
 
 ## Phase checklist
 
@@ -14,7 +14,7 @@ Current phase: **Phase 5 — Personal taste model (simulation)**
 | 3 | Reference-conditioned compositions | ✅ Implemented (simulation; MIDI A/B proxies) |
 | 4 | Critic + multi-iteration | ✅ Implemented (simulation + fixtures; eval-driven PatchOps) |
 | 5 | Personal taste model | ✅ Implemented (simulation encoder + ranking head; no CLAP download) |
-| 6 | Autonomous full-length | ❌ Not started |
+| 6 | Autonomous full-length | ✅ Implemented (sim/FakeDaw/MIDI; manual FL Playlist steps) |
 | 7 | Research upgrades | ❌ Not started |
 
 ## Module status
@@ -56,8 +56,14 @@ Current phase: **Phase 5 — Personal taste model (simulation)**
 | Holdout-by-project eval + calibration | ✅ | mock-tested |
 | Taste model registry / rollback | ✅ | mock-tested |
 | Style vectors from approved recipes | ✅ | mock-tested |
+| Full-song structure templates | ✅ | mock-tested |
+| Arrangement engine (multi-section + intensity) | ✅ | mock-tested |
+| `full-compose` brief/ref → MIDI + version | ✅ | mock-tested |
+| Scratch vs Release compose gate | ✅ | mock-tested (Release blocks DAW write) |
+| Instrument palette hints | ✅ | mock-tested |
 | AuditionRequest / sound match | 🚧 schema stub | — |
-| Full brief-canvas UI | ❌ | — |
+| Full brief-canvas UI / DAW approval drawer UI | ❌ | — |
+| Live loop strip / sound-library audition | ❌ | deferred |
 | Live PostFader / FL Studio | ❌ | blocked (N/A on Linux CI) |
 | Audio embeddings (CLAP/MERT) | 🚧 interface only | deferred (approval flag) |
 
@@ -74,10 +80,14 @@ Current phase: **Phase 5 — Personal taste model (simulation)**
 - MP3/FLAC/M4A decode requires ffmpeg on PATH.
 - Taste frozen encoder defaults to **simulation CIR projection** — not CLAP/MERT. Ranking head is real numpy logistic; deploy gated on beating retrieval holdout.
 - Style vectors require **approved** recipes with recoverable CIR; never invented.
+- Phase 6 full-length uses simulation generators tiled across structure templates — not a learned long-form model.
+- Live FL Playlist arrangement is **manual** (`docs/setup-macos-fl-studio.md#phase-6-full-length-import`).
+- Release mode (collaborative) exports MIDI + plan but does not auto-write FakeDaw notes.
 
 ## Next
 
-1. Phase 6 autonomous full-length (sections, Scratch vs Release, sound library audition).
+1. Phase 7 research upgrades (only after Phase 6 review/merge).
 2. Wire live bounce metrics on Mac when PostFader probed.
 3. Optional Demucs / Basic Pitch / audio encoder only after explicit approval (see `docs/audio-models.md`).
 4. Collect real listening pairwise data to replace/augment `taste-simulate`.
+5. Sound-library loudness-matched audition + brief-canvas UI (product surfaces).

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Annotated
 from uuid import UUID
 
 import typer
@@ -21,7 +22,7 @@ from backend.app.services.revise import revise_project
 from backend.app.storage.assets import AssetStore
 
 app = typer.Typer(
-    help="Private AI Music Producer — Phase 0–5 CLI (refs, critic, personal taste)",
+    help="Private AI Music Producer — Phase 0–6 CLI (refs, critic, taste, full-length)",
     no_args_is_help=True,
 )
 console = Console()
@@ -350,6 +351,160 @@ def templates_cmd() -> None:
     for t in list_templates():
         table.add_row(t.id, f"{t.default_bpm:g}", f"{t.groove_density:.2f}", t.notes or "")
     console.print(table)
+
+
+@app.command("structure-templates")
+def structure_templates_cmd() -> None:
+    """List Phase 6 full-song structure templates."""
+    from backend.app.music.structure_templates import list_structure_templates
+
+    table = Table(title="Full-song structure templates")
+    table.add_column("ID")
+    table.add_column("Genre")
+    table.add_column("Bars")
+    table.add_column("Sections")
+    table.add_column("Notes")
+    for t in list_structure_templates():
+        table.add_row(
+            t.id,
+            t.genre_template_id,
+            str(t.length_bars),
+            str(len(t.section_map)),
+            (t.notes or "")[:48],
+        )
+    console.print(table)
+
+
+@app.command("full-compose")
+def full_compose_cmd(
+    prompt: str = typer.Argument(..., help="Creative brief / NL request"),
+    seed: int | None = typer.Option(None, help="Explicit RNG seed"),
+    bars: int | None = typer.Option(
+        None, help="Full-song length in bars (32–256; default from structure template)"
+    ),
+    structure: str | None = typer.Option(
+        None, "--structure", help="Structure template id (e.g. afrobeats_full)"
+    ),
+    scratch: bool = typer.Option(True, "--scratch/--release", help="Scratch vs Release mode"),
+    autonomy: str = typer.Option(
+        "collaborative", help="suggest-only | collaborative | autonomous"
+    ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help="Bypass Release DAW gate when --autonomy autonomous (logged)",
+    ),
+    ref: bool = typer.Option(False, "--ref", help="Condition on fixture reference profile"),
+    fixture: str = typer.Option("afrobeats", help="Fixture genre when --ref"),
+    trait: Annotated[
+        list[str] | None, typer.Option(help="Borrow traits when --ref (repeatable)")
+    ] = None,
+    mode: str | None = typer.Option(None, help="simulation | midi_export"),
+    workspace: Annotated[
+        Path | None, typer.Option(help="Override workspace directory")
+    ] = None,
+    lock: Annotated[
+        list[str] | None, typer.Option(help="Roles to lock (repeatable)")
+    ] = None,
+) -> None:
+    """Brief/reference → full instrumental + MIDI export + versioned editable project."""
+    from backend.app.music.arrangement import MAX_FULL_BARS, MIN_FULL_BARS
+    from backend.app.services.full_compose import (
+        full_compose_from_prompt,
+        full_compose_from_reference,
+    )
+
+    if bars is not None and (bars < MIN_FULL_BARS or bars > MAX_FULL_BARS):
+        raise typer.BadParameter(f"bars must be {MIN_FULL_BARS}–{MAX_FULL_BARS}")
+    settings = _settings(mode, workspace)
+    setup_logging(settings.log_level)
+    scratch_or_release = "scratch" if scratch else "release"
+    locked = list(lock or [])
+    try:
+        if ref:
+            result = full_compose_from_reference(
+                prompt,
+                traits=list(trait or []),
+                fixture=fixture,
+                seed=seed,
+                structure_id=structure,
+                bars=bars,
+                scratch_or_release=scratch_or_release,
+                autonomy_mode=autonomy,
+                settings=settings,
+                adapter=_adapter(settings),
+                locked_roles=locked,
+                force=force,
+            )
+        else:
+            result = full_compose_from_prompt(
+                prompt,
+                seed=seed,
+                structure_id=structure,
+                bars=bars,
+                scratch_or_release=scratch_or_release,
+                autonomy_mode=autonomy,
+                settings=settings,
+                adapter=_adapter(settings),
+                locked_roles=locked,
+                force=force,
+            )
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+    console.print(f"[bold green]Full project[/] {result.project.id}")
+    console.print(
+        f"  structure: {result.plan.structure_template_id}  "
+        f"genre: {result.project.genre_template_id}  "
+        f"bars: {result.project.length_bars}  "
+        f"sections: {len(result.project.sections)}"
+    )
+    console.print(
+        f"  seed: {result.project.seed}  bpm: {result.project.bpm}  "
+        f"key: {result.project.key_estimate}  "
+        f"mode: {result.plan.scratch_or_release}"
+    )
+    if result.gated:
+        console.print("[yellow]Release gate:[/] DAW write skipped — MIDI + plan only")
+    console.print(f"  version: {result.version.id}")
+    console.print(f"  candidate: {result.candidate.id if result.candidate else '—'}")
+    console.print(f"  plan: {result.arrangement_plan_path}")
+    console.print(f"  CIR: projects/{result.project.id}/versions/{result.version.id}.json")
+
+    table = Table(title="Sections")
+    table.add_column("Name")
+    table.add_column("Bars")
+    table.add_column("Intensity")
+    for s in result.project.sections:
+        table.add_row(s.name, f"{s.start_bar}–{s.end_bar}", f"{s.intensity_target:.2f}")
+    console.print(table)
+
+    palette = Table(title="Instrument palette (hints)")
+    palette.add_column("Role")
+    palette.add_column("Suggestion")
+    for role, hint in result.plan.instrument_palette.items():
+        palette.add_row(role, hint)
+    console.print(palette)
+
+    midi_table = Table(title="Exported MIDI (playable)")
+    midi_table.add_column("Role")
+    midi_table.add_column("Path")
+    for role, path in result.midi_paths.items():
+        midi_table.add_row(role, str(path))
+    console.print(midi_table)
+
+    console.print(
+        f"DAW [{settings.daw_mode.value}]: succeeded={result.daw_result.succeeded} "
+        f"verified={result.daw_result.verified} arrange_ops={len(result.arrange_results)}"
+    )
+    if result.daw_result.user_action_required:
+        console.print(f"[yellow]User action:[/] {result.daw_result.user_action_required}")
+    console.print("[bold]Manual FL steps[/] (also in manual_fl_steps.json):")
+    for step in result.manual_steps[:6]:
+        console.print(f"  • {step}")
+    if len(result.manual_steps) > 6:
+        console.print(f"  … +{len(result.manual_steps) - 6} more")
+    _print_moves(result.next_moves)
 
 
 @app.command("recipe-save")

@@ -61,6 +61,28 @@ Checklist before enabling `DAW_MODE=postfader`:
 - [ ] Scratch `.flp` used for all write tests; backup outside the project tree
 - [ ] Capability matrix updated with ✅ / ❌ from **live** probes — never invent method names
 
+## Phase 6 full-length import
+
+`music-ai full-compose` produces a **multi-section** instrumental (typically 48–80 bars) plus an arrangement plan. Live Playlist automation is **not** available without a verified PostFader/FL bridge — place patterns manually.
+
+1. Generate:
+
+```bash
+music-ai full-compose "mellow Afrobeats 110 BPM in A minor" --seed 42 --mode midi_export
+# or from a fixture reference:
+music-ai full-compose "Afrobeats with bass bounce" --ref --fixture afrobeats --seed 11
+```
+
+2. Open a **Scratch** `.flp` (use `--scratch`; avoid `--release` until you have reviewed MIDI).
+3. Set tempo to the BPM printed by the CLI / `arrangement_plan.json`.
+4. Import `workspace/midi/<project-id>/drums.mid`, `bass.mid`, `chord.mid` (File → Import → MIDI file or drag to Channel Rack).
+5. Assign instruments using the **instrument palette** hints in `workspace/projects/<project-id>/arrangement_plan.json`.
+6. On the **Playlist**, arrange / duplicate patterns to match `section_map` bar ranges (also listed in `manual_fl_steps.json`), e.g. intro 1–8, verse 9–24, chorus 25–40, …
+7. Optional: import `combined.mid` as a single multi-channel reference track, then mute once stems are placed.
+8. Bounce/export audio manually → `workspace/renders/` if you want later phases to pick up a render.
+
+Release mode (`--release`): the app exports MIDI + plan but **does not** auto-write FakeDaw notes — review first, then re-run with `--scratch`, or bypass the gate explicitly with `--release --autonomy autonomous --force` (logged). Autonomous alone is not enough.
+
 ## Safety
 
 - Back up `.flp` files before any automated write.
