@@ -134,7 +134,11 @@ def test_recipe_apply_respects_locks(tmp_settings: Settings) -> None:
     assets = AssetStore(tmp_settings)
     recipe = recipe_from_project(locked.project, name="amapiano-winner")
     assert "drums" in recipe.locked_roles
+    assert recipe.cir_snapshot_ref
     save_recipe(recipe, assets)
+
+    recipe_drums = next(t for t in locked.project.tracks if t.role.value == "drums")
+    recipe_drum_dump = [n.model_dump() for n in recipe_drums.note_events]
 
     multi = apply_recipe(
         recipe.id,
@@ -147,9 +151,16 @@ def test_recipe_apply_respects_locks(tmp_settings: Settings) -> None:
     )
     assert multi.brief.recipe_id == recipe.id
     assert "drums" in multi.brief.locked_roles
+    assert multi.recipe_cir_restored is True
     for c in multi.candidates:
         drums = next(t for t in c.project.tracks if t.role.value == "drums")
         assert drums.locked
+        # Locked MIDI must replay recipe CIR, not freshly generated material
+        assert [n.model_dump() for n in drums.note_events] == recipe_drum_dump
+    # Cross-candidate lock identity still holds
+    d0 = next(t for t in multi.candidates[0].project.tracks if t.role.value == "drums")
+    d1 = next(t for t in multi.candidates[1].project.tracks if t.role.value == "drums")
+    assert [n.model_dump() for n in d0.note_events] == [n.model_dump() for n in d1.note_events]
 
 
 def test_ref_compose_midi_export_mode(tmp_settings: Settings) -> None:

@@ -63,8 +63,10 @@ class MultiCandidateResult:
     session_path: Path | None = None
     reference_profile_id: str | None = None
     recipe_id: str | None = None
+    recipe_cir_restored: bool = False
     phase2_dependency: str = (
-        "ReferenceProfile via FixtureReferenceAnalyzer until Phase 2 merges"
+        "Phase 2 ReferenceProfile pipeline available; "
+        "FixtureReferenceAnalyzer remains for demos without a live file"
     )
 
 
@@ -206,8 +208,14 @@ def generate_candidates(
     profile: ReferenceProfile | None = None,
     reference_ids: list[UUID] | None = None,
     name: str | None = None,
+    baseline_project: MusicProject | None = None,
 ) -> MultiCandidateResult:
-    """Generate N independent CandidatePackages with seeds base, base+1, …"""
+    """Generate N independent CandidatePackages with seeds base, base+1, ….
+
+    When ``baseline_project`` is set (e.g. recipe CIR) and the brief has
+    ``locked_roles``, locked track events are restored from that CIR into
+    every candidate via ``merge_preserving_locks``.
+    """
     if n < 1:
         raise ValueError("n must be >= 1")
     if brief.length_bars < 8 or brief.length_bars > 16:
@@ -232,6 +240,11 @@ def generate_candidates(
         # profile.id is not a ReferenceAsset id — keep separate; refs are asset ids
         pass
 
+    # Recipe / explicit CIR: restore locked roles into cand0 (and later cands).
+    locked_source = baseline_project
+    if locked_source is not None and conditioned.locked_roles:
+        locked_source = apply_role_locks(locked_source, conditioned.locked_roles)
+
     baseline = _package_one(
         brief=conditioned,
         seed=seed0,
@@ -243,11 +256,14 @@ def generate_candidates(
         reference_ids=refs,
         name=name,
         parent_version_id=None,
-        baseline_project=None,
+        baseline_project=locked_source,
         index=0,
         shared_project_id=shared_id,
     )
 
+    # Subsequent candidates share locked material from the packaged baseline
+    # (which already carries recipe CIR locked tracks when provided).
+    lock_baseline = baseline.project
     candidates = [baseline]
     for i in range(1, n):
         bundle = _package_one(
@@ -261,7 +277,7 @@ def generate_candidates(
             reference_ids=refs,
             name=name,
             parent_version_id=baseline.version.id,
-            baseline_project=baseline.project,
+            baseline_project=lock_baseline,
             index=i,
             shared_project_id=shared_id,
         )
@@ -271,6 +287,9 @@ def generate_candidates(
     tip.project.version_id = tip.version.id
     repo.save_project(tip.project)
 
+    recipe_cir_restored = bool(
+        locked_source is not None and conditioned.locked_roles
+    )
     session_meta = {
         "session_id": str(session_id),
         "project_id": str(shared_id),
@@ -281,7 +300,11 @@ def generate_candidates(
         "reference_profile_id": str(profile.id) if profile else None,
         "reference_ids": [str(r) for r in refs],
         "recipe_id": str(conditioned.recipe_id) if conditioned.recipe_id else None,
-        "phase2_dependency": "FixtureReferenceAnalyzer until Phase 2 merges",
+        "recipe_cir_restored": recipe_cir_restored,
+        "phase2_dependency": (
+            "Phase 2 ReferenceProfile pipeline available; "
+            "FixtureReferenceAnalyzer remains for demos without a live file"
+        ),
         "candidates": [
             {
                 "index": c.index,
@@ -346,4 +369,5 @@ def generate_candidates(
         session_path=session_path,
         reference_profile_id=str(profile.id) if profile else None,
         recipe_id=str(conditioned.recipe_id) if conditioned.recipe_id else None,
+        recipe_cir_restored=recipe_cir_restored,
     )

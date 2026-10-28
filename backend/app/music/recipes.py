@@ -1,4 +1,4 @@
-"""Recipe save/load stubs (Phase 1) — groove + palette + locks session memory."""
+"""Recipe save/load — groove + palette + locks + CIR locked-track replay."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from uuid import UUID
 
-from backend.app.models.schemas import MusicProject, Recipe, SectionDraft, utcnow
+from backend.app.models.schemas import BriefDocument, MusicProject, Recipe, SectionDraft, utcnow
 from backend.app.storage.assets import AssetStore
 
 
@@ -32,6 +32,7 @@ def recipe_from_project(
         "meter": project.meter,
         "length_bars": project.length_bars,
         "role_note_counts": {t.role.value: len(t.note_events) for t in project.tracks},
+        "genre_template_id": project.genre_template_id,
     }
     return Recipe(
         name=name or f"{project.name}-recipe",
@@ -39,7 +40,11 @@ def recipe_from_project(
         groove_fingerprint=groove,
         arrangement_skeleton=skeleton,
         locked_roles=locked,
-        brief_snapshot={"generation_brief": project.generation_brief, "seed": project.seed},
+        brief_snapshot={
+            "generation_brief": project.generation_brief,
+            "seed": project.seed,
+            "genre_template_id": project.genre_template_id,
+        },
         cir_snapshot_ref=f"projects/{project.id}/versions/{project.version_id}.json"
         if project.version_id
         else None,
@@ -96,6 +101,37 @@ def list_recipes(assets: AssetStore) -> list[Recipe]:
     return out
 
 
+def load_recipe_cir(recipe: Recipe, assets: AssetStore) -> MusicProject | None:
+    """Load the CIR snapshot referenced by a recipe (locked-track source of truth).
+
+    Falls back to the source project's tip metadata when ``cir_snapshot_ref``
+    is missing or stale. Returns None only when no CIR can be recovered —
+    callers then generate fresh locked material (documented stub path).
+    """
+    if recipe.cir_snapshot_ref:
+        path = assets.root / recipe.cir_snapshot_ref
+        if path.exists():
+            return MusicProject.model_validate(json.loads(path.read_text(encoding="utf-8")))
+    if recipe.source_project_id is not None:
+        meta_path = assets.root / "projects" / str(recipe.source_project_id) / "metadata.json"
+        if meta_path.exists():
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            vid = meta.get("version_id")
+            if vid:
+                cir_path = (
+                    assets.root
+                    / "projects"
+                    / str(recipe.source_project_id)
+                    / "versions"
+                    / f"{vid}.json"
+                )
+                if cir_path.exists():
+                    return MusicProject.model_validate(
+                        json.loads(cir_path.read_text(encoding="utf-8"))
+                    )
+    return None
+
+
 def brief_from_recipe(
     recipe: Recipe,
     *,
@@ -103,9 +139,9 @@ def brief_from_recipe(
     seed: int | None = None,
     bars: int | None = None,
     novelty: float | None = None,
-) -> "BriefDocument":
+) -> BriefDocument:
     """Seed a BriefDocument from a saved recipe (locks + groove + skeleton)."""
-    from backend.app.models.schemas import BriefDocument, EnergyPoint, utcnow
+    from backend.app.models.schemas import EnergyPoint
     from backend.app.music.brief import parse_brief
 
     fp = recipe.groove_fingerprint or {}
@@ -117,6 +153,13 @@ def brief_from_recipe(
         bars=length,
         locked_roles=list(recipe.locked_roles),
     )
+    # Prefer persisted genre from recipe over brief-text re-parse
+    genre = (
+        recipe.brief_snapshot.get("genre_template_id")
+        or fp.get("genre_template_id")
+    )
+    if genre:
+        brief.genre_template_id = str(genre)
     if fp.get("bpm"):
         brief.bpm = float(fp["bpm"])
     if fp.get("key"):
@@ -149,13 +192,19 @@ def apply_recipe(
     adapter=None,
     profile=None,
 ):
-    """Load recipe → brief → N candidates (Phase 3 recipe apply)."""
+    """Load recipe → brief → N candidates, replaying locked CIR MIDI when available.
+
+    Locked roles are restored from ``recipe.cir_snapshot_ref`` (or source tip)
+    via ``generate_candidates(baseline_project=…)``. If no CIR can be loaded,
+    candidates still share freshly generated locked material (stub path).
+    """
     from backend.app.services.candidates import generate_candidates
 
     recipe = load_recipe(recipe_id, assets)
     if recipe is None:
         raise ValueError(f"unknown recipe {recipe_id}")
     brief = brief_from_recipe(recipe, prompt=prompt, seed=seed, bars=bars)
+    recipe_cir = load_recipe_cir(recipe, assets)
     return generate_candidates(
         brief,
         n=n,
@@ -163,4 +212,5 @@ def apply_recipe(
         settings=settings,
         adapter=adapter,
         profile=profile,
+        baseline_project=recipe_cir,
     )

@@ -242,7 +242,8 @@ def revise_project(
 
         critic = critique_project(merged, diff=musical_diff, max_moves=3)
         next_moves = critic.next_moves or propose_next_moves(merged, diff=musical_diff)
-    except Exception:  # noqa: BLE001 — never block revise on critic failures
+    except Exception as exc:  # noqa: BLE001 — never block revise on critic failures
+        log_event(logger, "revise.critic_fallback", error=str(exc))
         next_moves = propose_next_moves(merged, diff=musical_diff)
     meta = {
         "project_id": str(merged.id),

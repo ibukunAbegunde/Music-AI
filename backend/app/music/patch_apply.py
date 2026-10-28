@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from copy import deepcopy
 from random import Random
-from typing import Iterable
 
 from backend.app.models.schemas import DawOperation, MusicProject, TrackRole
 from backend.app.music.brief import explicit_genre_from_text, parse_brief
@@ -16,7 +16,6 @@ from backend.app.music.coedit import (
 )
 from backend.app.music.generators import generate_from_brief
 from backend.app.music.templates import get_template
-
 
 SUPPORTED_ACTIONS = frozenset(
     {

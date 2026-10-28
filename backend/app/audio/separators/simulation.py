@@ -119,8 +119,8 @@ class SimulationStemSeparator:
             version=self.version,
             limitations=[
                 "Default Phase 2 separator is simulated (no Demucs weights).",
-                "Enable real Demucs later via MUSIC_AI_SEPARATOR=demucs + optional extra "
-                "`pip install -e '.[demucs]'` (large download; user-approved only).",
+                ("Enable real Demucs later via MUSIC_AI_SEPARATOR=demucs + optional extra "
+                "`pip install -e '.[demucs]'` (large download; user-approved only)."),
                 bleed,
             ],
             simulated=True,

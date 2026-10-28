@@ -35,7 +35,7 @@ def write_wav(path: Path, samples: np.ndarray, sample_rate: int) -> Path:
         channels = 1
         frames = arr
     elif arr.ndim == 2:
-        channels = arr.shape[1] if arr.shape[0] > arr.shape[1] else arr.shape[0]
+        channels = min(arr.shape[0], arr.shape[1])
         # Prefer (n_samples, n_channels)
         if arr.shape[0] < arr.shape[1] and arr.shape[0] <= 8:
             arr = arr.T

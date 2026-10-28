@@ -6,8 +6,8 @@ analyzer once Phase 2 types land on main.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Sequence
 from uuid import UUID
 
 from backend.app.audio.reference import (

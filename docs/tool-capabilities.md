@@ -53,12 +53,25 @@ Legend: ✅ supported & verified in tests · ⚠️ partial / manual · ❌ unsu
 5. Fake DAW apply / verify / snapshot / restore.
 6. MIDI export adapter writes files and returns `user_action_required` import instructions.
 
+## Audio reference pipeline (Phase 2 — simulation defaults)
+
+| Capability | Status |
+|------------|--------|
+| Stem separation | ✅ **Simulation** adapter (`MUSIC_AI_SEPARATOR=simulation`) — band/transient split; bleed expected. Demucs optional, refuses without install. |
+| Transcription | ✅ **Stub** adapter (`MUSIC_AI_TRANSCRIBER=stub`) → editable MIDI. Basic Pitch optional, refuses without install. |
+| BPM / key / groove estimates | ✅ Numpy heuristics (`is_estimate=True`) |
+| Embeddings (CLAP/MERT) | ❌ Deferred |
+| Taste / preference model | ❌ Phase 5 — not started |
+
+See `docs/audio-models.md` for optional Demucs / Basic Pitch enablement (no auto-download).
+
 ## Explicitly unsupported / not claimed
 
 - Live FL Studio project mutation from this VM.
 - Unattended audio bounce.
 - PostFader tool names or method signatures (must be discovered on the Mac; never fabricated).
-- Stem separation, transcription, embeddings, taste model (later phases).
+- Neural stem separation / Basic Pitch without an explicit local install.
+- Audio embeddings and personal taste model (later phases).
 - Sending user audio to external services (`ALLOW_CLOUD_AUDIO=false`).
 
 ## When the user probes on macOS

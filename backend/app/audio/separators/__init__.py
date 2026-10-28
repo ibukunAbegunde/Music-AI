@@ -18,4 +18,4 @@ def get_separator(name: str | None = None) -> StemSeparator:
     raise ValueError(f"unknown separator {name!r}; use 'simulation' or 'demucs'")
 
 
-__all__ = ["StemSeparator", "StemSet", "SimulationStemSeparator", "get_separator"]
+__all__ = ["SimulationStemSeparator", "StemSeparator", "StemSet", "get_separator"]

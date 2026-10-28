@@ -5,11 +5,11 @@ from __future__ import annotations
 from backend.app.core.config import DawMode, Settings
 from backend.app.daw.fake import FakeDawAdapter
 from backend.app.daw.midi_fallback import MidiExportAdapter
+from backend.app.models.db import init_db
 from backend.app.music.midi import read_note_ons
 from backend.app.services.compose import compose_from_prompt
 from backend.app.storage.assets import AssetStore
 from backend.app.storage.repository import ProjectRepository
-from backend.app.models.db import init_db
 
 
 def test_compose_simulation_persists_and_exports(tmp_settings: Settings) -> None:

@@ -227,3 +227,35 @@ def test_fixture_driven_critique_persists_artifacts(tmp_settings: Settings) -> N
         data = json.loads(loop_path.read_text(encoding="utf-8"))
         assert data["undo_verified"] is True
         assert data["fixture_id"] == "muddy_sub"
+
+
+def test_fixture_overlay_drops_when_cir_healthy(tmp_settings: Settings) -> None:
+    """After measured improve clears CIR fails, final proposals must not stay fixture-sticky."""
+    from backend.app.render_eval.metrics import Scoreboard
+    from backend.app.services.revision_loop import _proposal_fixture_id
+
+    healthy = Scoreboard(technical=0.95, musical=0.92, technical_fail_count=0, musical_fail_count=0)
+    assert _proposal_fixture_id(healthy, "hot_clipping") is None
+    unhealthy = Scoreboard(technical=0.4, musical=0.5, technical_fail_count=1, musical_fail_count=0)
+    assert _proposal_fixture_id(unhealthy, "hot_clipping") == "hot_clipping"
+
+    daw = FakeDawAdapter()
+    composed = compose_from_prompt(
+        "Afrobeats 110 BPM",
+        seed=55,
+        settings=tmp_settings,
+        adapter=daw,
+    )
+    result = run_revision_loop(
+        composed.project.id,
+        apply_ops=True,
+        fixture_id="hot_clipping",
+        max_iterations=3,
+        settings=tmp_settings,
+        adapter=daw,
+    )
+    # When final CIR board is healthy, metadata marks proposal_source=cir
+    if result.final_scoreboard and not result.final_scoreboard.any_fail:
+        meta = result.metadata.get("revision_loop") or {}
+        assert meta.get("proposal_source") == "cir"
+        assert meta.get("proposal_fixture_id") is None

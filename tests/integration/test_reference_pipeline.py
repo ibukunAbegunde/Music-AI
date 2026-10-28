@@ -5,13 +5,13 @@ from __future__ import annotations
 from pathlib import Path
 
 from backend.app.models.schemas import BorrowTrait
+from backend.app.music.brief import parse_brief
 from backend.app.services.reference import (
     bind_borrow_chips,
     load_profile,
     run_pipeline,
     stem_to_music_track,
 )
-from backend.app.music.brief import parse_brief
 from tests.fixtures.audio import make_groove_wav
 
 

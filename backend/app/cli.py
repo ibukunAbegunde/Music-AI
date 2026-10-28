@@ -147,9 +147,16 @@ def ref_compose(
     prompt: str = typer.Argument(..., help="Creative brief (novelty encouraged)"),
     trait: list[str] | None = typer.Option(
         None,
-        help="Borrow traits (repeatable): bass_bounce, percussion_texture, …",
+        help=(
+            "Borrow traits (repeatable). Canonical: bass_bounce, drums, "
+            "percussion_texture, atmosphere, chords, arrangement, bass_rhythm, "
+            "groove, energy. Aliases: chord_feel→chords, groove_swing→groove, …"
+        ),
     ),
-    fixture: str = typer.Option("afrobeats", help="Fixture genre profile until Phase 2"),
+    fixture: str = typer.Option(
+        "afrobeats",
+        help="Fixture genre profile (demo without a live file; Phase 2 pipeline also available)",
+    ),
     n: int = typer.Option(2, help="Number of candidates (seeds)"),
     seed: int | None = typer.Option(None, help="Base seed (candidates use seed..seed+n-1)"),
     bars: int = typer.Option(8, help="Loop length 8–16"),

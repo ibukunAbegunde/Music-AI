@@ -26,7 +26,7 @@ class MidiExportAdapter(DawAdapter):
 
     def connect(self) -> DawResult:
         self.connected = True
-        self.assets.root  # ensure workspace
+        _ = self.assets.root  # ensure workspace
         return DawResult(
             True,
             True,

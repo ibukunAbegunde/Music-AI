@@ -1,9 +1,9 @@
-"""Reference analysis adapter interfaces + Phase 2 fixture stubs.
+"""Reference analysis adapter interfaces + fixture analyzer for demos.
 
-Phase 2 will replace ``FixtureReferenceAnalyzer`` with real import → analyse →
-stem → profile wiring. Phase 3 only needs a ``ReferenceProfile`` (+ optional
-asset metadata) and borrow-chip binding — keep schemas stable so Phase 2 can
-drop in without rewriting conditioning.
+Phase 2 ships real import → analyse → stem → profile wiring
+(``services.reference`` / ``audio.ingest``). ``FixtureReferenceAnalyzer`` remains
+for Phase 3 demos without a live reference file. Borrow-chip binding uses the
+canonical ``BorrowTrait`` set via ``music.borrow``.
 """
 
 from __future__ import annotations
@@ -22,40 +22,11 @@ from backend.app.models.schemas import (
     UseMode,
     utcnow,
 )
-
-# Canonical vocab = Phase 2 ``BorrowTrait`` values. Legacy Phase 3 aliases
-# (chord_feel / groove_swing / energy_curve) normalize onto these.
-KNOWN_BORROW_TRAITS = frozenset(
-    {
-        "bass_bounce",
-        "drums",
-        "percussion_texture",
-        "atmosphere",
-        "chords",
-        "arrangement",
-        "bass_rhythm",
-        "groove",
-        "energy",
-    }
+from backend.app.music.borrow import (  # noqa: F401 — re-export
+    KNOWN_BORROW_TRAITS,
+    TRAIT_ALIASES,
+    normalize_borrow_trait,
 )
-
-# Map free-form / legacy chip names → BorrowTrait values.
-TRAIT_ALIASES: dict[str, str] = {
-    "bass": "bass_bounce",
-    "bass_feel": "bass_bounce",
-    "percussion": "percussion_texture",
-    "perc": "percussion_texture",
-    "pads": "atmosphere",
-    "space": "atmosphere",
-    "pad": "atmosphere",
-    "chord_feel": "chords",
-    "harmony": "chords",
-    "rhodes": "chords",
-    "keys": "chords",
-    "groove_swing": "groove",
-    "swing": "groove",
-    "energy_curve": "energy",
-}
 
 
 class ReferenceAnalyzer(Protocol):
@@ -86,12 +57,10 @@ def bind_borrow_chips(
     """Map selected abstract traits onto brief borrow chips (no audio copy)."""
     chips: list[BorrowChip] = []
     for trait in traits:
-        t = trait.strip().lower().replace(" ", "_").replace("-", "_")
-        t = TRAIT_ALIASES.get(t, t)
         chips.append(
             BorrowChip(
                 reference_id=reference_id or profile.id,
-                trait=t,
+                trait=normalize_borrow_trait(trait),
                 weight=weight,
             )
         )
@@ -99,7 +68,7 @@ def bind_borrow_chips(
 
 
 def afrobeats_fixture_profile(*, profile_id: UUID | None = None) -> ReferenceProfile:
-    """Synthetic Afrobeats-like profile — stand-in until Phase 2 analysis exists."""
+    """Synthetic Afrobeats-like profile for demos without a live reference file."""
     return ReferenceProfile(
         id=profile_id or uuid4(),
         bpm_estimate=110.0,
@@ -136,7 +105,7 @@ def afrobeats_fixture_profile(*, profile_id: UUID | None = None) -> ReferencePro
             "typical_durations": [1.5, 0.75, 0.5],
         },
         mix_metrics={"estimated_lufs": -11.5, "stereo_width": 0.55},
-        analyst_versions={"fixture": "phase3-stub-0.1", "phase2_status": "pending"},
+        analyst_versions={"fixture": "phase3-stub-0.1", "phase2_status": "available"},
     )
 
 
@@ -166,7 +135,7 @@ def trap_fixture_profile(*, profile_id: UUID | None = None) -> ReferenceProfile:
             "typical_durations": [3.5, 0.1],
         },
         mix_metrics={"estimated_lufs": -9.0},
-        analyst_versions={"fixture": "phase3-stub-0.1", "phase2_status": "pending"},
+        analyst_versions={"fixture": "phase3-stub-0.1", "phase2_status": "available"},
     )
 
 
@@ -185,7 +154,7 @@ def load_fixture_profile(name: str = "afrobeats") -> ReferenceProfile:
 
 
 class FixtureReferenceAnalyzer:
-    """In-memory stub analyzer — no DSP. Phase 2 replaces this implementation."""
+    """In-memory stub analyzer — no DSP. Optional demo path alongside Phase 2 pipeline."""
 
     def __init__(self) -> None:
         self._assets: dict[UUID, ReferenceAsset] = {}
@@ -213,7 +182,7 @@ class FixtureReferenceAnalyzer:
             lineage={
                 "analyzer": "FixtureReferenceAnalyzer",
                 "fixture_genre": fixture_genre or "afrobeats",
-                "phase2_dependency": True,
+                "phase2_available": True,
             },
             imported_at=utcnow(),
         )

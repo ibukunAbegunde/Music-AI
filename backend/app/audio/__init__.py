@@ -11,11 +11,11 @@ from backend.app.audio.reference import (
 from backend.app.audio.separators import get_separator
 
 __all__ = [
-    "analyse_audio",
-    "import_reference",
-    "get_separator",
     "FixtureReferenceAnalyzer",
     "ReferenceAnalyzer",
+    "analyse_audio",
     "bind_borrow_chips",
+    "get_separator",
+    "import_reference",
     "load_fixture_profile",
 ]

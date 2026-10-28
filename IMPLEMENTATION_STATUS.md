@@ -30,10 +30,10 @@ Current phase: **Phase 4 — Critic + multi-iteration (simulation)**
 | CandidatePackage packaging (compose + revise + multi) | ✅ | mock-tested |
 | Compose + revise + replace-bass (genre_template_id persisted) | ✅ | mock-tested |
 | N-candidate exploration + seeds | ✅ | mock-tested |
-| Borrow-trait conditioning (aligned to `BorrowTrait`) | ✅ | mock-tested |
+| Borrow-trait conditioning (canonical `BorrowTrait` + aliases) | ✅ | mock-tested |
 | `ReferenceAnalyzer` + FixtureReferenceAnalyzer | ✅ stub | mock-tested |
 | A/B compare (MIDI proxy / audio-ready) | ✅ | mock-tested |
-| Recipe save/load/**apply** | ✅ | mock-tested |
+| Recipe save/load/**apply** (locked CIR MIDI replay) | ✅ | mock-tested |
 | Version timeline + restore | ✅ | mock-tested |
 | FakeDaw verify/undo | ✅ | mock-tested |
 | MidiExportAdapter | ✅ | mock-tested / manual-fallback |
@@ -60,7 +60,8 @@ Current phase: **Phase 4 — Critic + multi-iteration (simulation)**
 - No live FL Studio on cloud Linux VM; render metrics are CIR-simulated or fixture overlays.
 - Default stems are **simulated** band/transient splits — not Demucs; bleed expected.
 - Default transcription is a **stub** heuristic — not Basic Pitch.
-- Fixture overlays drive critic *proposals*; scoreboard deltas always use CIR simulation so PatchOps remain measurable.
+- Fixture overlays drive critic *proposals* until CIR fails clear (then overlay drops); scoreboard deltas always use CIR simulation so PatchOps remain measurable.
+- Recipe apply restores locked-track events from `cir_snapshot_ref` when the CIR file is present.
 - Soften-bass / fill / replace-bass remain heuristic revise ops; PatchOp executor covers critic-loop ops.
 - A/B uses MIDI preview proxies until bounce WAVs exist (`loudness_notes.normalization_status=midi_proxy`).
 - Neural audio dual-path documented; models not installed (awaiting approval).
