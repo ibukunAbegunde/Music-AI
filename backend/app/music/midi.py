@@ -148,7 +148,7 @@ def flatten_notes(track: MusicTrack) -> list[NoteEvent]:
     return list(track.note_events)
 
 
-def assert_eight_bars_span(project: MusicProject, bpb: int = 4) -> None:
+def assert_project_span(project: MusicProject, bpb: int = 4) -> None:
     """Sanity: at least one note starts inside the final bar window."""
     end = project.length_bars * bpb
     starts = [n.onset_beats for t in project.tracks for n in t.note_events]
@@ -161,3 +161,7 @@ def assert_eight_bars_span(project: MusicProject, bpb: int = 4) -> None:
         roles = {t.role for t in project.tracks}
         if TrackRole.CHORD in roles or TrackRole.BASS in roles:
             raise AssertionError("expected harmonic material spanning into final bars")
+
+
+# Back-compat alias (Phase 0–5 name)
+assert_eight_bars_span = assert_project_span

@@ -313,13 +313,27 @@ def generate_from_brief(
     bass = generate_bass(brief, Random(seed + 1), bars, bpb, plan)
     chords = generate_chords(brief, Random(seed + 2), bars, bpb, plan)
     tracks = [drums, bass, chords]
-    section = Section(
-        name="loop_a",
-        start_bar=1,
-        end_bar=bars,
-        intensity_target=0.6,
-        active_track_ids=[t.id for t in tracks],
-    )
+    if brief.section_map and len(brief.section_map) > 1:
+        sections = [
+            Section(
+                name=s.name,
+                start_bar=s.start_bar,
+                end_bar=s.end_bar,
+                intensity_target=s.intensity_target,
+                active_track_ids=[t.id for t in tracks],
+            )
+            for s in brief.section_map
+        ]
+    else:
+        sections = [
+            Section(
+                name=(brief.section_map[0].name if brief.section_map else "loop_a"),
+                start_bar=1,
+                end_bar=bars,
+                intensity_target=0.6,
+                active_track_ids=[t.id for t in tracks],
+            )
+        ]
     tmpl = get_template(brief.genre_template_id or "default")
     project = MusicProject(
         id=new_id(),
@@ -332,8 +346,8 @@ def generate_from_brief(
         length_bars=bars,
         tracks=tracks,
         track_ids=[t.id for t in tracks],
-        sections=[section],
-        section_ids=[section.id],
+        sections=sections,
+        section_ids=[s.id for s in sections],
         generation_brief=brief.free_text,
         genre_template_id=tmpl.id,
         brief_id=brief.id,

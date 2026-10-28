@@ -1,12 +1,13 @@
 # Private AI Music Producer
 
-Local-first AI music production assistant. **Spec v1.1** — constraint-first briefs, role-locks, musical diffs, candidate packaging, **reference → stems → MIDI** pipeline, reference-conditioned loops, **eval-driven critic → typed PatchOps**, **personal taste ranking**. CIR/MIDI is the system of record; neural audio dual-path is allowed later without delaying models for product reasons.
+Local-first AI music production assistant. **Spec v1.1** — constraint-first briefs, role-locks, musical diffs, candidate packaging, **reference → stems → MIDI** pipeline, reference-conditioned loops, **eval-driven critic → typed PatchOps**, **personal taste ranking**, **full-length multi-section instrumentals**. CIR/MIDI is the system of record; neural audio dual-path is allowed later without delaying models for product reasons.
 
-> Phase 0–5 (simulation / MIDI manual-import / render fixtures / taste sim encoder). No live FL Studio claimed on Linux CI.  
+> Phase 0–6 (simulation / MIDI manual-import / render fixtures / taste sim encoder / full-length arrange). No live FL Studio claimed on Linux CI.  
 > Default stems + transcription + taste encoder are **simulated/stub** — no large model downloads.  
 > Phase 3 can use fixture `ReferenceProfile` adapters or real Phase 2 profiles.  
 > Phase 4 critic uses CIR simulation + optional render fixtures (`--fixture`).  
-> Phase 5 ranking head trains on frozen sim embeds; activates only if holdout beats retrieval.
+> Phase 5 ranking head trains on frozen sim embeds; activates only if holdout beats retrieval.  
+> Phase 6 `full-compose` → multi-section instrumental + MIDI + versioned CIR; FL Playlist steps are manual.
 
 ## Requirements
 
@@ -96,18 +97,34 @@ music-ai compose "Afrobeats 110 BPM" --seed 42 --n 2
 music-ai ab <project-id> --choice b --reason "prefer B bass"
 ```
 
+### Phase 6 demo (full-length instrumental)
+
+```bash
+music-ai structure-templates
+music-ai full-compose "mellow Afrobeats 110 BPM in A minor" --seed 42
+# optional bars / structure / release gate:
+music-ai full-compose "trap 140 BPM" --structure trap_full --bars 64 --seed 7
+music-ai full-compose "trap 140" --release --structure trap_full   # MIDI+plan only
+music-ai full-compose "Afrobeats with bass bounce" --ref --fixture afrobeats --seed 11
+music-ai versions <project-id>
+```
+
+Outputs: `workspace/midi/<id>/`, `workspace/projects/<id>/{arrangement_plan,manual_fl_steps,metadata,versions}/`.  
+Import into FL: [docs/setup-macos-fl-studio.md](docs/setup-macos-fl-studio.md#phase-6-full-length-import).
+
 ### Tests
 
 ```bash
 pytest
 pytest tests/unit/test_taste_*.py tests/integration/test_phase5_taste.py
+pytest tests/unit/test_structure_and_arrangement.py tests/integration/test_phase6_full_length.py
 ```
 
 ## What's implemented
 
-**Real (sim):** Reference import (hash + rights + immutable store), numpy BPM/key/groove estimates, simulation stem separator, stub transcription → editable MIDI, ReferenceProfile, stem→role (+ lock), borrow chips (canonical `BorrowTrait` + aliases), BriefDocument, genre templates, conditioned generators, role-locks, MusicalDiff, multi-candidate packaging, A/B MIDI proxies, recipe apply with locked CIR MIDI replay, FakeDaw / midi_export, **eval-driven critic → typed PatchOps**, CIR PatchOp applicator, bounded revision loop with measured improvement + rollback (fixture overlays drop once CIR healthy), render fixtures, CLI.
+**Real (sim):** Reference import (hash + rights + immutable store), numpy BPM/key/groove estimates, simulation stem separator, stub transcription → editable MIDI, ReferenceProfile, stem→role (+ lock), borrow chips (canonical `BorrowTrait` + aliases), BriefDocument, genre templates, **full-song structure templates + arrangement**, conditioned generators, role-locks, MusicalDiff, multi-candidate packaging, A/B MIDI proxies, recipe apply with locked CIR MIDI replay, FakeDaw / midi_export, **eval-driven critic → typed PatchOps**, CIR PatchOp applicator, bounded revision loop with measured improvement + rollback (fixture overlays drop once CIR healthy), render fixtures, taste ranking + registry, **`full-compose`**, CLI.
 
-**Stubbed / pending:** Demucs / Basic Pitch (optional adapters, no auto-download), embeddings, listening journal UI, audition-in-context, React UI, live PostFader, neural audio models.
+**Stubbed / pending:** Demucs / Basic Pitch (optional adapters, no auto-download), embeddings, listening journal UI, audition-in-context, React UI / DAW approval drawer, live PostFader, neural audio models, Phase 7 research.
 
 ## Docs
 
@@ -116,7 +133,7 @@ pytest tests/unit/test_taste_*.py tests/integration/test_phase5_taste.py
 - [Tool capabilities](docs/tool-capabilities.md)
 - [macOS + FL Studio setup](docs/setup-macos-fl-studio.md)
 - [Evaluation / critic](docs/evaluation.md)
-- [PHASE_0_REPORT.md](PHASE_0_REPORT.md) · [PHASE_1_REPORT.md](PHASE_1_REPORT.md) · [PHASE_2_REPORT.md](PHASE_2_REPORT.md) · [PHASE_3_REPORT.md](PHASE_3_REPORT.md) · [PHASE_4_REPORT.md](PHASE_4_REPORT.md)
+- [PHASE_0_REPORT.md](PHASE_0_REPORT.md) · [PHASE_1_REPORT.md](PHASE_1_REPORT.md) · [PHASE_2_REPORT.md](PHASE_2_REPORT.md) · [PHASE_3_REPORT.md](PHASE_3_REPORT.md) · [PHASE_4_REPORT.md](PHASE_4_REPORT.md) · [PHASE_5_REPORT.md](PHASE_5_REPORT.md) · [PHASE_6_REPORT.md](PHASE_6_REPORT.md)
 - [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md)
 
 ## Config
