@@ -28,7 +28,7 @@ Current phase: **Phase 1 — DAW control & generated beat (simulation)**
 | Role-locks + bar-lock merge + humanize | ✅ | mock-tested |
 | MusicalDiff (count + pitch/content) | ✅ | mock-tested |
 | CandidatePackage packaging (compose + revise) | ✅ | mock-tested |
-| Compose + revise pipelines | ✅ | mock-tested |
+| Compose + revise pipelines (genre_template_id persisted) | ✅ | mock-tested |
 | FakeDaw verify/undo | ✅ | mock-tested |
 | MidiExportAdapter | ✅ | mock-tested / manual-fallback |
 | Critic → typed PatchOps | 🚧 stub heuristics (lock-aware) | mock-tested |

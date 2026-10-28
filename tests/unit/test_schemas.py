@@ -36,6 +36,7 @@ def test_music_project_defaults() -> None:
     assert p.length_bars == 8
     assert p.status.value == "CREATED"
     assert p.rights_policy.allow_direct_sample is False
+    assert p.genre_template_id is None
 
 
 def test_reference_unknown_license_default() -> None:

@@ -74,6 +74,7 @@ def test_revise_preserves_key_and_updates_metadata(tmp_settings: Settings) -> No
         adapter=daw,
     )
     assert composed.project.key_estimate == "C major"
+    assert composed.project.genre_template_id == "trap"
     revised = revise_project(
         composed.project.id,
         "keep the drums, soften bass",
@@ -83,6 +84,7 @@ def test_revise_preserves_key_and_updates_metadata(tmp_settings: Settings) -> No
     )
     assert revised.project.key_estimate == "C major"
     assert revised.project.bpm == 140.0
+    assert revised.project.genre_template_id == "trap"
     assets = AssetStore(tmp_settings)
     meta = json.loads(
         (assets.root / "projects" / str(revised.project.id) / "metadata.json").read_text(
@@ -91,10 +93,44 @@ def test_revise_preserves_key_and_updates_metadata(tmp_settings: Settings) -> No
     )
     assert meta["version_id"] == str(revised.version.id)
     assert meta["key"] == "C major"
+    assert meta["genre_template_id"] == "trap"
     cand_path = (
         assets.root / "projects" / str(revised.project.id) / f"candidate_{revised.candidate.id}.json"
     )
     assert cand_path.exists()
+
+
+def test_multi_step_revise_keeps_genre_template(tmp_settings: Settings) -> None:
+    """Second revise must not fall back to default after brief text is overwritten."""
+    daw = FakeDawAdapter()
+    composed = compose_from_prompt(
+        "trap 140 BPM in C major",
+        seed=11,
+        settings=tmp_settings,
+        adapter=daw,
+    )
+    assert composed.project.genre_template_id == "trap"
+    first = revise_project(
+        composed.project.id,
+        "keep the drums, soften bass",
+        seed=12,
+        settings=tmp_settings,
+        adapter=daw,
+    )
+    assert first.project.genre_template_id == "trap"
+    assert first.project.generation_brief == "keep the drums, soften bass"
+    second = revise_project(
+        composed.project.id,
+        "humanize",
+        seed=13,
+        settings=tmp_settings,
+        adapter=daw,
+    )
+    assert second.project.genre_template_id == "trap"
+    assert second.project.key_estimate == "C major"
+    assert second.project.bpm == 140.0
+    drums = next(t for t in second.project.tracks if t.role.value == "drums")
+    assert "trap" in drums.tags
 
 
 def test_revise_add_fill_respects_drum_lock(tmp_settings: Settings) -> None:
