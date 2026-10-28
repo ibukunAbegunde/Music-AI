@@ -1,10 +1,11 @@
 # Private AI Music Producer
 
-Local-first AI music production assistant. **Spec v1.1** — constraint-first briefs, role-locks, musical diffs, candidate packaging, **reference → stems → MIDI** pipeline, reference-conditioned loops. CIR/MIDI is the system of record; neural audio dual-path is allowed later without delaying models for product reasons.
+Local-first AI music production assistant. **Spec v1.1** — constraint-first briefs, role-locks, musical diffs, candidate packaging, **reference → stems → MIDI** pipeline, reference-conditioned loops, **eval-driven critic → typed PatchOps**. CIR/MIDI is the system of record; neural audio dual-path is allowed later without delaying models for product reasons.
 
-> Phase 0–3 (simulation / MIDI manual-import). No live FL Studio claimed on Linux CI.  
+> Phase 0–4 (simulation / MIDI manual-import / render fixtures). No live FL Studio claimed on Linux CI.  
 > Default stems + transcription are **simulated/stub** — no large model downloads.  
-> Phase 3 can use fixture `ReferenceProfile` adapters or real Phase 2 profiles.
+> Phase 3 can use fixture `ReferenceProfile` adapters or real Phase 2 profiles.  
+> Phase 4 critic uses CIR simulation + optional render fixtures (`--fixture`).
 
 ## Requirements
 
@@ -31,6 +32,12 @@ music-ai templates
 music-ai brief "mellow Afrobeats 110 BPM in A minor with Rhodes chords"
 music-ai compose "mellow Afrobeats 110 BPM in A minor" --seed 42
 music-ai revise <project-id> "keep the drums, soften bass" --seed 43
+
+# Phase 4 critic / bounded revision loop (simulation + fixtures)
+music-ai critique <project-id> --fixture hot_clipping
+music-ai revise-loop <project-id> --fixture muddy_sub          # suggest-only (collaborative)
+music-ai revise-loop <project-id> --apply --max-iters 3        # measured apply + rollback
+music-ai restore <project-id> <version-id>
 ```
 
 ### Phase 2 demo (reference pipeline)
@@ -65,7 +72,7 @@ music-ai recipe-save <project-id> --name "winner"
 music-ai recipe-apply <recipe-id> --n 2 --seed 11
 ```
 
-Outputs under `workspace/midi/<id>/` and `workspace/projects/<id>/` (metadata, brief, CIR, candidates, A/B, diffs).
+Outputs under `workspace/midi/<id>/`, `workspace/projects/<id>/` (metadata, brief, CIR, candidates, A/B, diffs), and `workspace/renders/<id>/`.
 
 ### Tests
 
@@ -75,9 +82,9 @@ pytest
 
 ## What's implemented
 
-**Real (sim):** Reference import (hash + rights + immutable store), numpy BPM/key/groove estimates, simulation stem separator, stub transcription → editable MIDI, ReferenceProfile, stem→role (+ lock), borrow chips (`BorrowTrait`), BriefDocument, genre templates, conditioned generators, role-locks, MusicalDiff, multi-candidate packaging, A/B MIDI proxies, recipe apply, FakeDaw / midi_export, critic PatchOp stubs, CLI.
+**Real (sim):** Reference import (hash + rights + immutable store), numpy BPM/key/groove estimates, simulation stem separator, stub transcription → editable MIDI, ReferenceProfile, stem→role (+ lock), borrow chips (`BorrowTrait`), BriefDocument, genre templates, conditioned generators, role-locks, MusicalDiff, multi-candidate packaging, A/B MIDI proxies, recipe apply, FakeDaw / midi_export, **eval-driven critic → typed PatchOps**, CIR PatchOp applicator, bounded revision loop with measured improvement + rollback, render fixtures, CLI.
 
-**Stubbed / pending:** Demucs / Basic Pitch (optional adapters, no auto-download), embeddings, listening journal UI, audition-in-context, full PatchOp executor (Phase 4), React UI, live PostFader, neural audio models.
+**Stubbed / pending:** Demucs / Basic Pitch (optional adapters, no auto-download), embeddings, listening journal UI, audition-in-context, React UI, live PostFader, neural audio models.
 
 ## Docs
 
@@ -85,7 +92,8 @@ pytest
 - [Audio models (optional Demucs / Basic Pitch)](docs/audio-models.md)
 - [Tool capabilities](docs/tool-capabilities.md)
 - [macOS + FL Studio setup](docs/setup-macos-fl-studio.md)
-- [PHASE_0_REPORT.md](PHASE_0_REPORT.md) · [PHASE_1_REPORT.md](PHASE_1_REPORT.md) · [PHASE_2_REPORT.md](PHASE_2_REPORT.md) · [PHASE_3_REPORT.md](PHASE_3_REPORT.md)
+- [Evaluation / critic](docs/evaluation.md)
+- [PHASE_0_REPORT.md](PHASE_0_REPORT.md) · [PHASE_1_REPORT.md](PHASE_1_REPORT.md) · [PHASE_2_REPORT.md](PHASE_2_REPORT.md) · [PHASE_3_REPORT.md](PHASE_3_REPORT.md) · [PHASE_4_REPORT.md](PHASE_4_REPORT.md)
 - [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md)
 
 ## Config

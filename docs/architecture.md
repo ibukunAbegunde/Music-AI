@@ -1,23 +1,23 @@
 # Architecture — Private AI Music Producer
 
-Version: 0.3.0 (Phase 2–3) | Spec: build spec **v1.1** + `product-upgrades-v1.1.md` (Agent Store)
+Version: 0.4.0 (Phase 0–4) | Spec: build spec **v1.1** + `product-upgrades-v1.1.md` (Agent Store)
 
 ## Purpose
 
-Local-first, reference-aware music production assistant for a single user on Apple Silicon + FL Studio. Creative intent flows through a **BriefDocument** (constraint-first canvas) into a **canonical intermediate representation (CIR)** (`MusicProject`), then adapters apply or export that state. Phase 2 adds reference ingest, feature estimates, stem separation adapters (default simulation), and pitched-stem transcription adapters (default stub) with stem→role mapping and borrow chips. Phase 3 adds reference-conditioned multi-candidate generation, A/B (MIDI proxies), recipe apply, and lock-honoring revise — still without live FL Studio or large models. Neural audio dual-path is allowed by v1.1; CIR remains system of record.
+Local-first, reference-aware music production assistant for a single user on Apple Silicon + FL Studio. Creative intent flows through a **BriefDocument** (constraint-first canvas) into a **canonical intermediate representation (CIR)** (`MusicProject`), then adapters apply or export that state. Phase 2 adds reference ingest, feature estimates, stem separation adapters (default simulation), and pitched-stem transcription adapters (default stub) with stem→role mapping and borrow chips. Phase 3 adds reference-conditioned multi-candidate generation, A/B (MIDI proxies), recipe apply, and lock-honoring revise. Phase 4 adds `render_eval` (technical + musical), critic → typed PatchOps, and a bounded revision loop with measured improvement + rollback — still simulation / fixtures. Neural audio dual-path is allowed by v1.1; CIR remains system of record.
 
 ## High-level diagram
 
 ```
- CLI (Phase 0–3) / future Local API + UI
+ CLI (Phase 0–4) / future Local API + UI
               |
-  compose / ref-pipeline / ref-compose / candidates / revise / ab
-       |              |                |              |
-  conditioning   audio/*          storage         daw adapters
-  + generators   ingest/analyse   (SQLite +       FakeDaw | MidiExport | PostFader*
-  brief/diff     separators/*     workspace/)     + FixtureAnalyzer*
-  coedit         transcription/*
-       \____________|________________|______________/
+  compose / ref-pipeline / ref-compose / candidates / revise / ab / critique / revise-loop
+       |              |                |              |              |
+  conditioning   audio/*          storage         daw adapters   render_eval + critic
+  + generators   ingest/analyse   (SQLite +       FakeDaw |      (fixtures / CIR sim
+  brief/diff     separators/*     workspace/)     MidiExport |   → typed PatchOps)
+  coedit/patch   transcription/*                  PostFader*)
+       \____________|________________|______________|______________/
          MusicProject (CIR) + ReferenceProfile + CandidatePackage
 ```
 
@@ -29,18 +29,18 @@ Local-first, reference-aware music production assistant for a single user on App
 | Module | Role | Status |
 |--------|------|--------|
 | `api` | Local HTTP / events | Deferred (CLI only) |
-| `orchestrator` | Task state machine | Compose / reference / candidates / revise |
+| `orchestrator` | Task state machine | Compose / reference / candidates / revise / revision_loop |
 | `llm` | Tool-using providers | Stub / unused |
 | `audio` | Ingest, analyse, stems + reference analyzer protocol/fixtures | **Phase 2** (sim) + Phase 3 fixtures |
 | `transcription` | Audio → MIDI | **Phase 2** (stub default) |
-| `music` | Theory, groove, generators, MIDI, brief, diff, coedit, conditioning, recipes | **Phase 1+3** |
+| `music` | Theory, groove, generators, MIDI, brief, diff, coedit, conditioning, recipes, patch_apply | **Phase 1+3+4** |
 | `generation` | Symbolic / neural | Deterministic + borrow conditioning |
 | `taste` | Preference / ranking | PreferenceComparison on A/B; model later |
 | `daw` | DAW adapters | Fake + MIDI export (+ verify/undo) |
-| `agents` | Critic / planner | PatchOp stub next-moves |
-| `render_eval` | Bounce analysis | A/B MIDI proxy path; audio when renders exist |
+| `agents` | Critic / planner | **Eval-driven typed PatchOps** (≤3 next moves) |
+| `render_eval` | Bounce / mix analysis | **Technical + musical + fixtures** |
 | `assets` | Sample/VST manifest | Workspace paths |
-| `storage` | SQLite, versions, refs | Projects + versions + references + sessions |
+| `storage` | SQLite, versions, refs | Projects + versions + references + sessions + renders |
 | `ui` | React local UI | Not started |
 
 ## Core data contracts
@@ -54,6 +54,14 @@ Pydantic models in `backend/app/models/schemas.py` (schema_version **0.3.0**): `
 3. **A/B** → MIDI proxies (or audio when present) + musical diff + optional preference
 4. **Revise** → role-locks (`keep drums, replace bass`) → version + diff
 5. **Recipe apply** → seed brief + locks → N candidates sharing locked material
+
+## Phase 4 flow
+
+1. **Evaluate** CIR (and optional render fixture) → technical + musical scoreboard
+2. **Critic** → ≤3 typed `DawOperation` / `PatchOp` (locked roles never targeted)
+3. **Apply** via CIR `patch_apply` (reject-on-lock)
+4. **Re-measure** → accept if `improved()`, else FakeDaw snapshot rollback
+5. **Collaborative default** awaits `--apply`; `restore` CLI for version tip
 
 ## Reference pipeline (Phase 2)
 
@@ -69,7 +77,7 @@ import-ref → analyse → separate → transcribe → profile
 
 Borrow chips selected from `available_borrow_traits` bind onto `BriefDocument.borrow_chips` for Phase 3 conditioning.
 
-Project status machine: `CREATED → PLANNED → ANALYSING → COMPOSING → APPLYING → VERIFYING → RENDER_PENDING → EVALUATING → AWAITING_FEEDBACK → COMPLETED` plus `FAILED` / `CANCELLED` / `PAUSED`. Phase 3 compose path: `COMPOSING → COMPLETED` with multi-version candidate session.
+Project status machine: `CREATED → PLANNED → ANALYSING → COMPOSING → APPLYING → VERIFYING → RENDER_PENDING → EVALUATING → AWAITING_FEEDBACK → COMPLETED` plus `FAILED` / `CANCELLED` / `PAUSED`. Phase 3 compose path: `COMPOSING → COMPLETED` with multi-version candidate session. Phase 4 loop adds `EVALUATING` ↔ apply/rollback.
 
 ## Persistence
 
@@ -84,6 +92,7 @@ Project status machine: `CREATED → PLANNED → ANALYSING → COMPOSING → APP
 3. Default audio path is simulation/stub; neural models opt-in after approval.
 4. Generators are deterministic given `(brief, seed, conditioning)`; they are templates, not a trained composer.
 5. MIDI export / MIDI A/B proxies are the truthful fallback when DAW bounce is absent.
+6. Critic scoreboard deltas use CIR simulation so PatchOps stay falsifiable without live bounce.
 
 ## Risks and mitigations
 
@@ -100,8 +109,9 @@ Project status machine: `CREATED → PLANNED → ANALYSING → COMPOSING → APP
 
 - **Phase 0–1:** capability docs + brief → 8-bar MIDI + locks/diff ← *done*
 - **Phase 2:** reference → stems (limitations) + editable MIDI + tempo/groove + role mapping ← *done (simulation)*
-- **Phase 3:** reference → novel 8–16 bar MIDI, A/B, keep-drums replace-bass ← *this slice*
-- Later: critic ops, taste, full arrangement (see `IMPLEMENTATION_STATUS.md`)
+- **Phase 3:** reference → novel 8–16 bar MIDI, A/B, keep-drums replace-bass ← *done (simulation)*
+- **Phase 4:** critic typed PatchOps + bounded loop + measured/confirmable improvement + rollback ← *this slice*
+- Later: taste, full arrangement (see `IMPLEMENTATION_STATUS.md`)
 
 ## Config
 

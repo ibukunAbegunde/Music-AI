@@ -236,7 +236,14 @@ def revise_project(
         candidate.model_dump(mode="json"),
     )
 
-    next_moves = propose_next_moves(merged, diff=musical_diff)
+    # Prefer evaluation-informed PatchOps (Phase 4); fall back to lock-aware stubs.
+    try:
+        from backend.app.agents.critic import critique_project
+
+        critic = critique_project(merged, diff=musical_diff, max_moves=3)
+        next_moves = critic.next_moves or propose_next_moves(merged, diff=musical_diff)
+    except Exception:  # noqa: BLE001 — never block revise on critic failures
+        next_moves = propose_next_moves(merged, diff=musical_diff)
     meta = {
         "project_id": str(merged.id),
         "version_id": str(version.id),
