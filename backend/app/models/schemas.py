@@ -358,7 +358,6 @@ class ArrangementPlan(BaseModel):
     section_map: list[SectionDraft] = Field(default_factory=list)
     instrument_palette: dict[str, str] = Field(default_factory=dict)
     energy_curve: list[EnergyPoint] = Field(default_factory=list)
-    motif_bars: int = 8
     scratch_or_release: str = "scratch"
     autonomy_mode: str = "collaborative"
     approvals_required: list[str] = Field(default_factory=list)

@@ -89,7 +89,7 @@ def test_generate_arranged_multi_section() -> None:
     assert project.length_bars == 64
     assert len(project.sections) == len(plan.section_map)
     assert project.sections[0].name == "intro"
-    assert project.schema_version == "0.4.0"
+    assert project.schema_version == "0.3.0"
     # Events present across roles
     roles = {t.role.value for t in project.tracks}
     assert {"drums", "bass", "chord"} <= roles

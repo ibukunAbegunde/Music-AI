@@ -29,7 +29,6 @@ from backend.app.music.theory import beats_per_bar
 
 MIN_FULL_BARS = 32
 MAX_FULL_BARS = 256
-DEFAULT_MOTIF_BARS = 8
 
 # Section kinds that stay sparse (drop bass or thin drums)
 _SPARSE_KINDS = {"intro", "outro", "break"}
@@ -80,7 +79,6 @@ def build_arrangement_plan(
         section_map=section_map,
         instrument_palette=dict(tmpl.instrument_palette),
         energy_curve=energy_curve_from_sections(section_map),
-        motif_bars=DEFAULT_MOTIF_BARS,
         scratch_or_release=brief.scratch_or_release,
         autonomy_mode=brief.autonomy_mode,
         approvals_required=approvals,
@@ -189,9 +187,9 @@ def _apply_section_intensity(
                     kind in _SPARSE_KINDS
                     and not protect
                     and d.instrument_role in ("hat", "hat_open", "perc")
+                    and rng.random() > 0.4
                 ):
-                    if rng.random() > 0.4:
-                        continue
+                    continue
                 dd = d.model_copy(deep=True)
                 dd.velocity = max(1, min(127, int(dd.velocity * (0.55 + 0.7 * intensity))))
                 new_drums.append(dd)
@@ -225,7 +223,7 @@ def _apply_section_intensity(
     out.sections = sections
     out.section_ids = [s.id for s in sections]
     out.length_bars = section_map[-1].end_bar
-    out.schema_version = "0.4.0"
+    # Keep domain schema_version at generator default (0.3.0) until a real migration.
     return out
 
 

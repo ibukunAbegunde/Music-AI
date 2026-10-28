@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Annotated
 from uuid import UUID
 
 import typer
@@ -395,10 +396,16 @@ def full_compose_cmd(
     ),
     ref: bool = typer.Option(False, "--ref", help="Condition on fixture reference profile"),
     fixture: str = typer.Option("afrobeats", help="Fixture genre when --ref"),
-    trait: list[str] | None = typer.Option(None, help="Borrow traits when --ref (repeatable)"),
+    trait: Annotated[
+        list[str] | None, typer.Option(help="Borrow traits when --ref (repeatable)")
+    ] = None,
     mode: str | None = typer.Option(None, help="simulation | midi_export"),
-    workspace: Path | None = typer.Option(None, help="Override workspace directory"),
-    lock: list[str] | None = typer.Option(None, help="Roles to lock (repeatable)"),
+    workspace: Annotated[
+        Path | None, typer.Option(help="Override workspace directory")
+    ] = None,
+    lock: Annotated[
+        list[str] | None, typer.Option(help="Roles to lock (repeatable)")
+    ] = None,
 ) -> None:
     """Brief/reference → full instrumental + MIDI export + versioned editable project."""
     from backend.app.music.arrangement import MAX_FULL_BARS, MIN_FULL_BARS
