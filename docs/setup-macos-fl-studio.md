@@ -81,7 +81,7 @@ music-ai full-compose "Afrobeats with bass bounce" --ref --fixture afrobeats --s
 7. Optional: import `combined.mid` as a single multi-channel reference track, then mute once stems are placed.
 8. Bounce/export audio manually → `workspace/renders/` if you want later phases to pick up a render.
 
-Release mode (`--release` without autonomous): the app exports MIDI + plan but **does not** auto-write FakeDaw notes — review first, then re-run with `--scratch` or approve an autonomous write path when live DAW exists.
+Release mode (`--release`): the app exports MIDI + plan but **does not** auto-write FakeDaw notes — review first, then re-run with `--scratch`, or bypass the gate explicitly with `--release --autonomy autonomous --force` (logged). Autonomous alone is not enough.
 
 ## Safety
 

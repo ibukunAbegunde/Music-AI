@@ -91,6 +91,7 @@ def full_compose_from_brief(
     name: str | None = None,
     conditioning: ConditioningPlan | None = None,
     reference_ids: list[UUID] | None = None,
+    force: bool = False,
 ) -> FullComposeResult:
     settings = settings or get_settings()
     logger = setup_logging(settings.log_level)
@@ -124,8 +125,11 @@ def full_compose_from_brief(
     daw_result: DawResult
 
     release = plan.scratch_or_release == "release"
-    # Release mode: do not auto-write notes to DAW; MIDI + plan only until approved.
-    if release and plan.autonomy_mode != "autonomous":
+    # Release mode: MIDI + plan only unless Scratch, or autonomous + --force (logged).
+    release_force_bypass = (
+        release and plan.autonomy_mode == "autonomous" and force
+    )
+    if release and not release_force_bypass:
         gated = True
         daw_result = DawResult(
             supported=True,
@@ -135,13 +139,22 @@ def full_compose_from_brief(
             observations={
                 "gate": "release_mode",
                 "approvals_required": plan.approvals_required,
+                "autonomy_mode": plan.autonomy_mode,
+                "force": force,
             },
             user_action_required=(
                 "Release mode: review arrangement_plan.json + MIDI, then re-run with "
-                "--scratch or autonomy=autonomous after approval."
+                "--scratch, or --release --autonomy autonomous --force after approval."
             ),
         )
     else:
+        if release_force_bypass:
+            log_event(
+                logger,
+                "full_compose.release_force_bypass",
+                autonomy_mode=plan.autonomy_mode,
+                structure=plan.structure_template_id,
+            )
         if isinstance(daw, FakeDawAdapter):
             snap = daw.save_snapshot("pre-full-compose")
             snapshot_ref = snap.observations.get("snapshot_ref")
@@ -293,6 +306,7 @@ def full_compose_from_prompt(
     settings: Settings | None = None,
     adapter: DawAdapter | None = None,
     locked_roles: list[str] | None = None,
+    force: bool = False,
 ) -> FullComposeResult:
     brief, plan = brief_for_full_compose(
         prompt,
@@ -303,7 +317,9 @@ def full_compose_from_prompt(
         autonomy_mode=autonomy_mode,
         locked_roles=locked_roles,
     )
-    return full_compose_from_brief(brief, plan, settings=settings, adapter=adapter)
+    return full_compose_from_brief(
+        brief, plan, settings=settings, adapter=adapter, force=force
+    )
 
 
 def full_compose_from_reference(
@@ -315,8 +331,11 @@ def full_compose_from_reference(
     structure_id: str | None = None,
     bars: int | None = None,
     scratch_or_release: str = "scratch",
+    autonomy_mode: str = "collaborative",
     settings: Settings | None = None,
     adapter: DawAdapter | None = None,
+    locked_roles: list[str] | None = None,
+    force: bool = False,
 ) -> FullComposeResult:
     """Reference-conditioned full-length path (fixture profile → borrow → arrange)."""
     from backend.app.audio.reference import FixtureReferenceAnalyzer, bind_borrow_chips
@@ -335,6 +354,8 @@ def full_compose_from_reference(
         structure_id=structure_id or f"{fixture}_full",
         bars=bars,
         scratch_or_release=scratch_or_release,
+        autonomy_mode=autonomy_mode,
+        locked_roles=locked_roles,
     )
     chips = bind_borrow_chips(
         profile,
@@ -353,6 +374,7 @@ def full_compose_from_reference(
         adapter=adapter,
         conditioning=conditioning,
         reference_ids=[ref_asset.id],
+        force=force,
     )
 
 

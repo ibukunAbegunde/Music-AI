@@ -14,7 +14,7 @@ Mode: **simulation / MIDI export** (FakeDaw + playable MIDI). Live FL Playlist p
 | Versioned editable project | ✅ | `ProjectVersion` + CIR JSON; `versions` / restore path reused |
 | Sections + structure templates | ✅ | `structure_templates.py` + `ArrangementPlan` + FakeDaw `arrange_section` |
 | Instrument palette | ✅ | Role → hint labels on plan / CLI |
-| Scratch vs Release | ✅ | Scratch writes FakeDaw; Release collaborative gates DAW write (MIDI+plan only) |
+| Scratch vs Release | ✅ | Scratch writes FakeDaw; Release gates DAW write unless `--autonomy autonomous --force` |
 | Manual FL steps documented | ✅ | `docs/setup-macos-fl-studio.md#phase-6-full-length-import` + per-project `manual_fl_steps.json` |
 | Tests + status docs | ✅ | 11 new tests; this report; `IMPLEMENTATION_STATUS.md` |
 

@@ -55,7 +55,33 @@ def _map(*parts: tuple[str, int, int, float]) -> list[SectionDraft]:
     ]
 
 
+# Genre / alias → structure id (no silent default — unknown → None).
+_GENRE_STRUCTURE_ALIASES: dict[str, str] = {
+    "afrobeat": "afrobeats_full",
+    "afrobeats": "afrobeats_full",
+    "amapiano": "amapiano_full",
+    "r&b": "rnb_full",
+    "rnb": "rnb_full",
+    "trap": "trap_full",
+    "drill": "drill_full",
+    "pop": "pop_full",
+    "default": "default_full",
+}
+
+
+def _structure_for_genre(genre: str) -> str | None:
+    key = genre.lower().strip()
+    if key in _GENRE_STRUCTURE_ALIASES:
+        return _GENRE_STRUCTURE_ALIASES[key]
+    return None
+
+
+def known_structure_ids() -> list[str]:
+    return sorted(_STRUCTURES)
+
+
 # Canonical full-length skeletons (bars inclusive). Default ~64–80 bars.
+# Repeated section kinds use _a/_b suffixes so Playlist / manual FL steps stay unambiguous.
 _STRUCTURES: dict[str, StructureTemplate] = {
     "afrobeats_full": StructureTemplate(
         id="afrobeats_full",
@@ -65,9 +91,9 @@ _STRUCTURES: dict[str, StructureTemplate] = {
         section_map=_map(
             ("intro", 1, 8, 0.30),
             ("verse", 9, 24, 0.50),
-            ("chorus", 25, 40, 0.78),
+            ("chorus_a", 25, 40, 0.78),
             ("bridge", 41, 48, 0.42),
-            ("chorus", 49, 64, 0.85),
+            ("chorus_b", 49, 64, 0.85),
         ),
         instrument_palette=_PALETTES["afrobeats"],
         notes="64-bar Afrobeats instrumental: intro→verse→chorus→bridge→chorus",
@@ -80,9 +106,9 @@ _STRUCTURES: dict[str, StructureTemplate] = {
         section_map=_map(
             ("intro", 1, 8, 0.28),
             ("groove", 9, 24, 0.55),
-            ("drop", 25, 40, 0.80),
+            ("drop_a", 25, 40, 0.80),
             ("break", 41, 48, 0.35),
-            ("drop", 49, 72, 0.82),
+            ("drop_b", 49, 72, 0.82),
             ("outro", 73, 80, 0.25),
         ),
         instrument_palette=_PALETTES["amapiano"],
@@ -96,9 +122,9 @@ _STRUCTURES: dict[str, StructureTemplate] = {
         section_map=_map(
             ("intro", 1, 8, 0.25),
             ("verse", 9, 24, 0.45),
-            ("chorus", 25, 40, 0.70),
+            ("chorus_a", 25, 40, 0.70),
             ("bridge", 41, 48, 0.40),
-            ("chorus", 49, 64, 0.75),
+            ("chorus_b", 49, 64, 0.75),
         ),
         instrument_palette=_PALETTES["rnb"],
     ),
@@ -110,9 +136,9 @@ _STRUCTURES: dict[str, StructureTemplate] = {
         section_map=_map(
             ("intro", 1, 8, 0.35),
             ("verse", 9, 24, 0.55),
-            ("chorus", 25, 40, 0.82),
+            ("chorus_a", 25, 40, 0.82),
             ("bridge", 41, 48, 0.40),
-            ("chorus", 49, 64, 0.88),
+            ("chorus_b", 49, 64, 0.88),
         ),
         instrument_palette=_PALETTES["trap"],
     ),
@@ -124,9 +150,9 @@ _STRUCTURES: dict[str, StructureTemplate] = {
         section_map=_map(
             ("intro", 1, 8, 0.40),
             ("verse", 9, 24, 0.60),
-            ("chorus", 25, 40, 0.85),
+            ("chorus_a", 25, 40, 0.85),
             ("bridge", 41, 48, 0.45),
-            ("chorus", 49, 64, 0.90),
+            ("chorus_b", 49, 64, 0.90),
         ),
         instrument_palette=_PALETTES["drill"],
     ),
@@ -139,9 +165,9 @@ _STRUCTURES: dict[str, StructureTemplate] = {
             ("intro", 1, 8, 0.30),
             ("verse", 9, 24, 0.50),
             ("prechorus", 25, 32, 0.60),
-            ("chorus", 33, 48, 0.80),
+            ("chorus_a", 33, 48, 0.80),
             ("bridge", 49, 56, 0.45),
-            ("chorus", 57, 64, 0.85),
+            ("chorus_b", 57, 64, 0.85),
         ),
         instrument_palette=_PALETTES["pop"],
     ),
@@ -153,9 +179,9 @@ _STRUCTURES: dict[str, StructureTemplate] = {
         section_map=_map(
             ("intro", 1, 8, 0.30),
             ("verse", 9, 24, 0.50),
-            ("chorus", 25, 40, 0.75),
+            ("chorus_a", 25, 40, 0.75),
             ("bridge", 41, 48, 0.40),
-            ("chorus", 49, 64, 0.80),
+            ("chorus_b", 49, 64, 0.80),
         ),
         instrument_palette=_PALETTES["default"],
         notes="Generic 64-bar instrumental skeleton",
@@ -168,27 +194,33 @@ def list_structure_templates() -> list[StructureTemplate]:
 
 
 def get_structure_template(template_id: str) -> StructureTemplate:
-    if template_id in _STRUCTURES:
-        return _STRUCTURES[template_id]
-    # Allow genre id → "<genre>_full"
-    genre = resolve_genre_id(template_id.removesuffix("_full"))
-    key = f"{genre}_full"
-    return _STRUCTURES.get(key, _STRUCTURES["default_full"])
+    """Return a known structure template; raise ValueError if id/genre is unknown."""
+    sid = resolve_structure_id(template_id)
+    return _STRUCTURES[sid]
 
 
 def resolve_structure_id(genre_or_structure: str | None, genre_template_id: str | None = None) -> str:
-    """Pick a structure template id from an explicit id or genre hint."""
+    """Pick a structure template id from an explicit id or genre hint.
+
+    Explicit unknown ids raise ``ValueError`` (no silent ``default_full``).
+    When both args are None / only an implicit brief genre is missing, falls back
+    to ``default_full``.
+    """
     if genre_or_structure:
         raw = genre_or_structure.lower().strip()
         if raw in _STRUCTURES:
             return raw
-        if raw.endswith("_full") and raw in _STRUCTURES:
-            return raw
-        genre = resolve_genre_id(raw.removesuffix("_full"))
-        key = f"{genre}_full"
-        if key in _STRUCTURES:
-            return key
+        mapped = _structure_for_genre(raw.removesuffix("_full"))
+        if mapped is not None:
+            return mapped
+        known = ", ".join(known_structure_ids())
+        raise ValueError(
+            f"unknown structure template {genre_or_structure!r}; "
+            f"known ids: {known} (or genre aliases: "
+            f"{', '.join(sorted(set(_GENRE_STRUCTURE_ALIASES)))})"
+        )
     if genre_template_id:
+        # Implicit path from brief genre — resolve_genre_id may map unknowns → default.
         key = f"{resolve_genre_id(genre_template_id)}_full"
         if key in _STRUCTURES:
             return key

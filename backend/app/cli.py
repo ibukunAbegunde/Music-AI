@@ -388,6 +388,11 @@ def full_compose_cmd(
     autonomy: str = typer.Option(
         "collaborative", help="suggest-only | collaborative | autonomous"
     ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help="Bypass Release DAW gate when --autonomy autonomous (logged)",
+    ),
     ref: bool = typer.Option(False, "--ref", help="Condition on fixture reference profile"),
     fixture: str = typer.Option("afrobeats", help="Fixture genre when --ref"),
     trait: list[str] | None = typer.Option(None, help="Borrow traits when --ref (repeatable)"),
@@ -407,30 +412,38 @@ def full_compose_cmd(
     settings = _settings(mode, workspace)
     setup_logging(settings.log_level)
     scratch_or_release = "scratch" if scratch else "release"
-    if ref:
-        result = full_compose_from_reference(
-            prompt,
-            traits=list(trait or []),
-            fixture=fixture,
-            seed=seed,
-            structure_id=structure,
-            bars=bars,
-            scratch_or_release=scratch_or_release,
-            settings=settings,
-            adapter=_adapter(settings),
-        )
-    else:
-        result = full_compose_from_prompt(
-            prompt,
-            seed=seed,
-            structure_id=structure,
-            bars=bars,
-            scratch_or_release=scratch_or_release,
-            autonomy_mode=autonomy,
-            settings=settings,
-            adapter=_adapter(settings),
-            locked_roles=list(lock or []),
-        )
+    locked = list(lock or [])
+    try:
+        if ref:
+            result = full_compose_from_reference(
+                prompt,
+                traits=list(trait or []),
+                fixture=fixture,
+                seed=seed,
+                structure_id=structure,
+                bars=bars,
+                scratch_or_release=scratch_or_release,
+                autonomy_mode=autonomy,
+                settings=settings,
+                adapter=_adapter(settings),
+                locked_roles=locked,
+                force=force,
+            )
+        else:
+            result = full_compose_from_prompt(
+                prompt,
+                seed=seed,
+                structure_id=structure,
+                bars=bars,
+                scratch_or_release=scratch_or_release,
+                autonomy_mode=autonomy,
+                settings=settings,
+                adapter=_adapter(settings),
+                locked_roles=locked,
+                force=force,
+            )
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
 
     console.print(f"[bold green]Full project[/] {result.project.id}")
     console.print(

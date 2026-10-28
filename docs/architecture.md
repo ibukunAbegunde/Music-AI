@@ -111,7 +111,9 @@ Project status machine: `CREATED → PLANNED → ANALYSING → COMPOSING → APP
 - **Phase 2:** reference → stems (limitations) + editable MIDI + tempo/groove + role mapping ← *done (simulation)*
 - **Phase 3:** reference → novel 8–16 bar MIDI, A/B, keep-drums replace-bass ← *done (simulation)*
 - **Phase 4:** critic typed PatchOps + bounded loop + measured/confirmable improvement + rollback ← *done (simulation)*
-- Later: taste (Phase 5), full arrangement (Phase 6) — see `IMPLEMENTATION_STATUS.md`
+- **Phase 5:** personal taste ranking + registry ← *done (simulation)*
+- **Phase 6:** full arrangement / `full-compose` ← *done (simulation)*
+- Later: Phase 7 research upgrades — see `IMPLEMENTATION_STATUS.md`
 
 ## Config
 

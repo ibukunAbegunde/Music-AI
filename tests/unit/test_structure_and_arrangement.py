@@ -38,6 +38,21 @@ def test_resolve_structure_from_genre() -> None:
     assert get_structure_template("amapiano").id == "amapiano_full"
 
 
+def test_unknown_structure_hard_fails() -> None:
+    with pytest.raises(ValueError, match="unknown structure"):
+        resolve_structure_id("not_a_real_thing")
+    with pytest.raises(ValueError, match="unknown structure"):
+        get_structure_template("nope_full")
+    with pytest.raises(ValueError, match="unknown structure"):
+        brief_for_full_compose("trap banger", seed=1, structure_id="not_a_real_thing")
+
+
+def test_section_names_unique_within_templates() -> None:
+    for t in list_structure_templates():
+        names = [s.name for s in t.section_map]
+        assert len(names) == len(set(names)), f"duplicate section names in {t.id}: {names}"
+
+
 def test_build_plan_and_energy_curve() -> None:
     brief = parse_brief("mellow Afrobeats 110 BPM in A minor", seed=1, bars=8)
     plan = build_arrangement_plan(brief)

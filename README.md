@@ -105,6 +105,8 @@ music-ai full-compose "mellow Afrobeats 110 BPM in A minor" --seed 42
 # optional bars / structure / release gate:
 music-ai full-compose "trap 140 BPM" --structure trap_full --bars 64 --seed 7
 music-ai full-compose "trap 140" --release --structure trap_full   # MIDI+plan only
+# Release + autonomous still gates unless --force:
+# music-ai full-compose "trap 140" --release --autonomy autonomous --force
 music-ai full-compose "Afrobeats with bass bounce" --ref --fixture afrobeats --seed 11
 music-ai versions <project-id>
 ```

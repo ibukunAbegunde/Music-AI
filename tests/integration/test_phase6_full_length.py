@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from backend.app.core.config import DawMode, Settings
 from backend.app.daw.fake import FakeDawAdapter
 from backend.app.daw.midi_fallback import MidiExportAdapter
@@ -89,6 +91,57 @@ def test_full_compose_release_gates_daw_write(tmp_settings: Settings) -> None:
     assert "release_mode_daw_write" in result.plan.approvals_required
 
 
+def test_full_compose_release_autonomous_still_gates_without_force(
+    tmp_settings: Settings,
+) -> None:
+    tmp_settings.ensure_workspace()
+    adapter = FakeDawAdapter()
+    result = full_compose_from_prompt(
+        "trap 140 BPM",
+        seed=8,
+        structure_id="trap_full",
+        scratch_or_release="release",
+        autonomy_mode="autonomous",
+        force=False,
+        settings=tmp_settings,
+        adapter=adapter,
+    )
+    assert result.gated is True
+    assert result.daw_result.attempted is False
+    assert adapter.project is None
+    assert result.midi_paths["combined"].exists()
+
+
+def test_full_compose_release_autonomous_force_writes(tmp_settings: Settings) -> None:
+    tmp_settings.ensure_workspace()
+    adapter = FakeDawAdapter()
+    result = full_compose_from_prompt(
+        "trap 140 BPM",
+        seed=9,
+        structure_id="trap_full",
+        scratch_or_release="release",
+        autonomy_mode="autonomous",
+        force=True,
+        settings=tmp_settings,
+        adapter=adapter,
+    )
+    assert result.gated is False
+    assert result.daw_result.succeeded
+    assert adapter.project is not None
+
+
+def test_full_compose_unknown_structure_raises(tmp_settings: Settings) -> None:
+    tmp_settings.ensure_workspace()
+    with pytest.raises(ValueError, match="unknown structure"):
+        full_compose_from_prompt(
+            "trap banger",
+            seed=1,
+            structure_id="not_a_real_thing",
+            settings=tmp_settings,
+            adapter=FakeDawAdapter(),
+        )
+
+
 def test_full_compose_from_reference_fixture(tmp_settings: Settings) -> None:
     tmp_settings.ensure_workspace()
     result = full_compose_from_reference(
@@ -104,6 +157,29 @@ def test_full_compose_from_reference_fixture(tmp_settings: Settings) -> None:
     assert result.project.reference_ids
     assert any(c.trait == "bass_bounce" for c in result.brief.borrow_chips)
     assert result.midi_paths["drums"].exists()
+
+
+def test_full_compose_from_reference_honors_autonomy_and_lock(
+    tmp_settings: Settings,
+) -> None:
+    tmp_settings.ensure_workspace()
+    result = full_compose_from_reference(
+        "original mellow Afrobeats with this bass bounce",
+        traits=["bass_bounce"],
+        fixture="afrobeats",
+        seed=12,
+        bars=48,
+        scratch_or_release="scratch",
+        autonomy_mode="autonomous",
+        locked_roles=["drums"],
+        settings=tmp_settings,
+        adapter=FakeDawAdapter(),
+    )
+    assert result.brief.autonomy_mode == "autonomous"
+    assert result.plan.autonomy_mode == "autonomous"
+    assert "drums" in result.brief.locked_roles
+    assert result.gated is False
+    assert result.daw_result.succeeded
 
 
 def test_full_compose_midi_export_mode(tmp_settings: Settings) -> None:
