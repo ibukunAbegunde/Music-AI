@@ -5,7 +5,7 @@ from __future__ import annotations
 from copy import deepcopy
 from random import Random
 
-from backend.app.models.schemas import BarRange, MusicProject, MusicTrack, TrackRole
+from backend.app.models.schemas import BarRange, MusicProject, MusicTrack, NoteEvent
 
 
 def apply_role_locks(project: MusicProject, roles: list[str]) -> MusicProject:
@@ -63,14 +63,30 @@ def humanize_track(
 
 def humanize_project(project: MusicProject, seed: int) -> MusicProject:
     out = project.model_copy(deep=True)
-    out.tracks = [
-        humanize_track(t, seed=seed + i) for i, t in enumerate(out.tracks)
-    ]
+    out.tracks = [humanize_track(t, seed=seed + i) for i, t in enumerate(out.tracks)]
     return out
 
 
+def _merge_notes_preserving_bar_locks(
+    base: MusicTrack,
+    regen: MusicTrack,
+    *,
+    bpb: int = 4,
+) -> list[NoteEvent]:
+    """Keep base notes in locked bars; take regen notes elsewhere."""
+    kept = [n.model_copy(deep=True) for n in base.note_events if is_onset_locked(base, n.onset_beats, bpb)]
+    incoming = [
+        n.model_copy(deep=True)
+        for n in regen.note_events
+        if not is_onset_locked(base, n.onset_beats, bpb)
+    ]
+    merged = kept + incoming
+    merged.sort(key=lambda n: (n.onset_beats, n.pitch))
+    return merged
+
+
 def merge_preserving_locks(base: MusicProject, regenerated: MusicProject) -> MusicProject:
-    """Keep locked tracks from base; take unlocked from regenerated."""
+    """Keep locked tracks / locked bars from base; take unlocked material from regenerated."""
     out = base.model_copy(deep=True)
     regen_by_role = {t.role.value: t for t in regenerated.tracks}
     new_tracks = []
@@ -82,10 +98,24 @@ def merge_preserving_locks(base: MusicProject, regenerated: MusicProject) -> Mus
             rt.id = t.id
             rt.locked = t.locked
             rt.locked_bar_ranges = list(t.locked_bar_ranges)
+            if t.locked_bar_ranges:
+                rt.note_events = _merge_notes_preserving_bar_locks(t, rt)
+                # Drum events: keep locked-bar hits from base
+                if t.drum_events or rt.drum_events:
+                    kept = [
+                        d.model_copy(deep=True)
+                        for d in t.drum_events
+                        if is_onset_locked(t, d.onset_beats)
+                    ]
+                    incoming = [
+                        d.model_copy(deep=True)
+                        for d in rt.drum_events
+                        if not is_onset_locked(t, d.onset_beats)
+                    ]
+                    rt.drum_events = sorted(kept + incoming, key=lambda d: d.onset_beats)
             new_tracks.append(rt)
         else:
             new_tracks.append(t)
-    # Add any new roles from regen that weren't in base
     base_roles = {t.role.value for t in out.tracks}
     for role, t in regen_by_role.items():
         if role not in base_roles:
@@ -106,7 +136,6 @@ def parse_lock_roles_from_text(text: str) -> list[str]:
         "bass": ("bass",),
         "chord": ("chord", "chords", "keys", "rhodes"),
     }
-    # "keep X"
     for role, words in mapping.items():
         if any(f"keep {w}" in lower or f"keep the {w}" in lower for w in words):
             locks.append(role)
@@ -114,3 +143,52 @@ def parse_lock_roles_from_text(text: str) -> list[str]:
             if role not in locks:
                 locks.append(role)
     return locks
+
+
+def add_end_fill(project: MusicProject, *, before_bar: int | None = None) -> MusicProject:
+    """Add a short drum fill before ``before_bar`` on unlocked drums (heuristic)."""
+    out = project.model_copy(deep=True)
+    target_bar = before_bar or out.length_bars
+    bpb = 4
+    onset = float((target_bar - 1) * bpb + 2.5)
+    for t in out.tracks:
+        if t.role.value != "drums" or t.locked:
+            continue
+        if is_onset_locked(t, onset):
+            continue
+        from backend.app.models.schemas import DrumEvent, NoteEvent
+
+        t.drum_events = list(t.drum_events) + [
+            DrumEvent(
+                instrument_role="hat_open",
+                onset_beats=onset,
+                velocity=105,
+                duration_beats=0.4,
+            ),
+            DrumEvent(
+                instrument_role="snare",
+                onset_beats=onset + 0.25,
+                velocity=110,
+                duration_beats=0.2,
+            ),
+        ]
+        t.note_events = list(t.note_events) + [
+            NoteEvent(
+                pitch=46,
+                onset_beats=onset,
+                duration_beats=0.4,
+                velocity=105,
+                channel=9,
+                source="revise:fill",
+            ),
+            NoteEvent(
+                pitch=38,
+                onset_beats=onset + 0.25,
+                duration_beats=0.2,
+                velocity=110,
+                channel=9,
+                source="revise:fill",
+            ),
+        ]
+        break
+    return out

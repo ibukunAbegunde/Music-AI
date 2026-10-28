@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from uuid import uuid4
 
-from backend.app.models.schemas import DawOperation, MusicProject, MusicalDiff
+from backend.app.models.schemas import DawOperation, MusicalDiff, MusicProject
 
 
 def propose_next_moves(
@@ -13,10 +13,12 @@ def propose_next_moves(
     diff: MusicalDiff | None = None,
     max_moves: int = 3,
 ) -> list[DawOperation]:
-    """Return up to max_moves typed patch ops (heuristic stubs)."""
+    """Return up to max_moves typed patch ops targeting unlocked roles only."""
     ops: list[DawOperation] = []
     unlocked = [t for t in project.tracks if not t.locked]
-    if any(t.role.value == "drums" and not t.locked for t in project.tracks):
+    unlocked_roles = {t.role.value for t in unlocked}
+
+    if "drums" in unlocked_roles:
         ops.append(
             DawOperation(
                 action_type="humanize_role",
@@ -29,7 +31,19 @@ def propose_next_moves(
                 requires_approval=project.autonomy_policy.scratch_or_release == "release",
             )
         )
-    if any(t.role.value == "bass" and not t.locked for t in project.tracks):
+        ops.append(
+            DawOperation(
+                action_type="add_fill",
+                target_role="drums",
+                parameters={"before_bar": project.length_bars},
+                idempotency_key=f"fill-{uuid4().hex[:8]}",
+                predicted_impact=f"Add fill before bar {project.length_bars}",
+                explanation="End-of-loop drum fill",
+                risk_level="low",
+                requires_approval=project.autonomy_policy.mode != "autonomous",
+            )
+        )
+    if "bass" in unlocked_roles:
         ops.append(
             DawOperation(
                 action_type="regenerate_role",
@@ -42,20 +56,35 @@ def propose_next_moves(
                 requires_approval=True,
             )
         )
-    ops.append(
-        DawOperation(
-            action_type="add_fill",
-            target_role="drums",
-            parameters={"before_bar": project.length_bars},
-            idempotency_key=f"fill-{uuid4().hex[:8]}",
-            predicted_impact=f"Add fill before bar {project.length_bars}",
-            explanation="End-of-loop drum fill",
-            risk_level="low",
-            requires_approval=project.autonomy_policy.mode != "autonomous",
+    if "chord" in unlocked_roles:
+        ops.append(
+            DawOperation(
+                action_type="regenerate_role",
+                target_role="chord",
+                parameters={"variation": "voicing"},
+                idempotency_key=f"regen-chord-{uuid4().hex[:8]}",
+                predicted_impact="New chord voicings",
+                explanation="Regenerate chords",
+                risk_level="medium",
+                requires_approval=True,
+            )
         )
-    )
-    # Prefer ops targeting unlocked roles when possible
-    if unlocked:
-        unlocked_roles = {t.role.value for t in unlocked}
-        ops = [o for o in ops if o.target_role in unlocked_roles or o.action_type == "add_fill"] or ops
+
+    # Never propose ops against locked roles
+    ops = [o for o in ops if o.target_role in unlocked_roles]
+    if not ops and unlocked_roles:
+        # Fallback: generic humanize on first unlocked role
+        role = next(iter(unlocked_roles))
+        ops.append(
+            DawOperation(
+                action_type="humanize_role",
+                target_role=role,
+                parameters={"timing_amount": 0.01, "velocity_jitter": 4},
+                idempotency_key=f"humanize-{role}-{uuid4().hex[:8]}",
+                predicted_impact=f"Humanize unlocked {role}",
+                explanation=f"Humanize {role}",
+                risk_level="low",
+                requires_approval=True,
+            )
+        )
     return ops[:max_moves]

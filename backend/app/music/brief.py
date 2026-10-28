@@ -21,6 +21,51 @@ def _seed_from_text(text: str, explicit: int | None) -> int:
     return int(hashlib.sha256(text.encode("utf-8")).hexdigest()[:8], 16)
 
 
+_KEY_RE = re.compile(
+    r"\b([A-Ga-g](?:#|b)?)\s*(major|minor|maj|min|m)?\b"
+)
+
+
+def explicit_key_from_text(text: str) -> str | None:
+    """Return a key string only when the text names a pitch class + optional mode.
+
+    Avoids false positives from bare letters (e.g. ``\"b\"`` inside ``\"bass\"``).
+    """
+    match = _KEY_RE.search(text)
+    if not match:
+        return None
+    root = match.group(1)
+    root = root[0].upper() + root[1:]
+    mode_tok = (match.group(2) or "").lower()
+    lower = text.lower()
+    if mode_tok in ("m", "min", "minor"):
+        return f"{root} minor"
+    if mode_tok in ("maj", "major"):
+        return f"{root} major"
+    if "minor" in lower and "major" not in lower:
+        return f"{root} minor"
+    if "major" in lower:
+        return f"{root} major"
+    # Bare pitch class with no mode word — treat as explicit only if mode nearby
+    # e.g. "in A" is ambiguous; require major/minor elsewhere or mode token.
+    if mode_tok:
+        return f"{root} minor"
+    return None
+
+
+def explicit_genre_from_text(text: str) -> str | None:
+    lower = text.lower()
+    for g in ("amapiano", "afrobeats", "afrobeat", "rnb", "r&b", "trap", "drill", "pop"):
+        if g in lower:
+            return resolve_genre_id(g)
+    return None
+
+
+def explicit_bpm_from_text(text: str) -> float | None:
+    match = re.search(r"(\d{2,3})\s*bpm", text.lower())
+    return float(match.group(1)) if match else None
+
+
 def parse_brief(
     text: str,
     *,
@@ -31,32 +76,14 @@ def parse_brief(
 ) -> BriefDocument:
     """Parse free text into a constraint-first BriefDocument."""
     lower = text.lower()
-    genre_id = "default"
-    for g in ("amapiano", "afrobeats", "afrobeat", "rnb", "r&b", "trap", "drill", "pop"):
-        if g in lower:
-            genre_id = resolve_genre_id(g)
-            break
+    genre_id = explicit_genre_from_text(text) or "default"
     tmpl = get_template(genre_id)
 
-    bpm: float | None = None
-    bpm_match = re.search(r"(\d{2,3})\s*bpm", lower)
-    if bpm_match:
-        bpm = float(bpm_match.group(1))
-    else:
+    bpm = explicit_bpm_from_text(text)
+    if bpm is None:
         bpm = tmpl.default_bpm
 
-    key = None
-    key_match = re.search(r"\b([A-Ga-g](?:#|b)?)\s*(major|minor|maj|min|m)?\b", text)
-    if key_match:
-        root = key_match.group(1)
-        root = root[0].upper() + root[1:]
-        mode_tok = (key_match.group(2) or "").lower()
-        if mode_tok in ("m", "min", "minor") or "minor" in lower:
-            key = f"{root} minor"
-        elif mode_tok in ("maj", "major"):
-            key = f"{root} major"
-        else:
-            key = f"{root} minor" if "minor" in lower else f"{root} major"
+    key = explicit_key_from_text(text)
     if key is None:
         key = "A minor"
 

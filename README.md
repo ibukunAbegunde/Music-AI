@@ -45,7 +45,7 @@ pytest
 
 **Real:** BriefDocument parser, genre templates, richer generators, role-locks, MusicalDiff, CandidatePackage, FakeDaw verify/undo, MidiExport, compose/revise CLI, critic PatchOp stubs.
 
-**Stubbed:** Recipe UX, listening journal, audition-in-context, full PatchOp executor, React brief canvas / DAW drawer UI, live PostFader.
+**Stubbed:** Recipe apply (save/load stubs wired), listening journal, audition-in-context, full PatchOp executor, React brief canvas / DAW drawer UI, live PostFader.
 
 ## Docs
 

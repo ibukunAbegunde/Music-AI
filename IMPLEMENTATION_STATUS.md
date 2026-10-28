@@ -25,14 +25,14 @@ Current phase: **Phase 1 — DAW control & generated beat (simulation)**
 | Genre templates library | ✅ | mock-tested |
 | NL → BriefDocument parser | ✅ | mock-tested |
 | Richer drum/bass/chord generators | ✅ | mock-tested |
-| Role-locks + bar-lock + humanize | ✅ | mock-tested |
-| MusicalDiff | ✅ | mock-tested |
-| CandidatePackage packaging | ✅ | mock-tested |
+| Role-locks + bar-lock merge + humanize | ✅ | mock-tested |
+| MusicalDiff (count + pitch/content) | ✅ | mock-tested |
+| CandidatePackage packaging (compose + revise) | ✅ | mock-tested |
 | Compose + revise pipelines | ✅ | mock-tested |
 | FakeDaw verify/undo | ✅ | mock-tested |
 | MidiExportAdapter | ✅ | mock-tested / manual-fallback |
-| Critic → typed PatchOps | 🚧 stub heuristics | mock-tested |
-| Recipe persistence UI | 🚧 schema only | — |
+| Critic → typed PatchOps | 🚧 stub heuristics (lock-aware) | mock-tested |
+| Recipe save/load stubs + compose `recipe_id` | ✅ | mock-tested |
 | AuditionRequest / sound match | 🚧 schema stub | — |
 | Listening journal | 🚧 schema only | — |
 | Full brief-canvas UI | ❌ | — |
@@ -44,7 +44,7 @@ Current phase: **Phase 1 — DAW control & generated beat (simulation)**
 - No live FL Studio on cloud Linux VM.
 - Soften-bass / fill are heuristic revise ops, not a full PatchOp executor.
 - Critic next-moves are stubs (not audio-informed).
-- Recipe save/load CLI not wired (schema present).
+- Recipe apply / seeding candidates deferred to Phase 3.
 - Neural audio dual-path documented in spec; not installed (awaiting approval).
 
 ## Next (Phase 2 prep)

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Optional
 from uuid import UUID
 
 import typer
@@ -66,11 +65,12 @@ def _print_moves(moves) -> None:
 @app.command()
 def compose(
     prompt: str = typer.Argument(..., help="Creative brief / NL request"),
-    seed: Optional[int] = typer.Option(None, help="Explicit RNG seed"),
+    seed: int | None = typer.Option(None, help="Explicit RNG seed"),
     bars: int = typer.Option(8, help="Loop length in bars"),
-    mode: Optional[str] = typer.Option(None, help="simulation | midi_export"),
-    workspace: Optional[Path] = typer.Option(None, help="Override workspace directory"),
-    lock: Optional[list[str]] = typer.Option(None, help="Roles to lock (repeatable)"),
+    mode: str | None = typer.Option(None, help="simulation | midi_export"),
+    workspace: Path | None = typer.Option(None, help="Override workspace directory"),
+    lock: list[str] | None = typer.Option(None, help="Roles to lock (repeatable)"),
+    recipe_id: str | None = typer.Option(None, help="Attach existing recipe UUID metadata"),
 ) -> None:
     """NL/brief → 8-bar drum/bass/chord MIDI + candidate package."""
     settings = _settings(mode, workspace)
@@ -82,6 +82,7 @@ def compose(
         settings=settings,
         adapter=_adapter(settings),
         locked_roles=list(lock or []),
+        recipe_id=UUID(recipe_id) if recipe_id else None,
     )
     console.print(f"[bold green]Project[/] {result.project.id}")
     console.print(f"  brief: {result.brief.title} ({result.brief.genre_template_id})")
@@ -125,7 +126,7 @@ def compose(
 @app.command()
 def brief(
     prompt: str = typer.Argument(..., help="Text to parse into BriefDocument JSON"),
-    seed: Optional[int] = typer.Option(None),
+    seed: int | None = typer.Option(None),
     bars: int = typer.Option(8),
 ) -> None:
     """Parse NL into a constraint-first brief canvas document (no generation)."""
@@ -140,9 +141,9 @@ def revise(
         ...,
         help="e.g. 'keep the drums, soften bass and add a fill before bar 8'",
     ),
-    seed: Optional[int] = typer.Option(None),
-    mode: Optional[str] = typer.Option(None, help="simulation | midi_export"),
-    workspace: Optional[Path] = typer.Option(None),
+    seed: int | None = typer.Option(None),
+    mode: str | None = typer.Option(None, help="simulation | midi_export"),
+    workspace: Path | None = typer.Option(None),
 ) -> None:
     """Revise a project honoring role-locks; print musical diff + next moves."""
     settings = _settings(mode, workspace)
@@ -179,6 +180,55 @@ def templates_cmd() -> None:
     console.print(table)
 
 
+@app.command("recipe-save")
+def recipe_save(
+    project_id: str = typer.Argument(..., help="Project UUID to snapshot as a recipe"),
+    name: str | None = typer.Option(None, help="Recipe display name"),
+    workspace: Path | None = typer.Option(None),
+) -> None:
+    """Save a recipe stub (groove fingerprint + locks) from a project CIR tip."""
+    from backend.app.music.recipes import recipe_from_project, save_recipe
+    from backend.app.services.revise import _load_cir
+
+    settings = _settings(None, workspace)
+    assets = AssetStore(settings)
+    project = _load_cir(assets, UUID(project_id), None)
+    if project is None:
+        raise typer.BadParameter(f"no CIR found for project {project_id}")
+    recipe = recipe_from_project(project, name=name)
+    path = save_recipe(recipe, assets)
+    console.print(f"[bold green]Recipe[/] {recipe.id}")
+    console.print(f"  name: {recipe.name}")
+    console.print(f"  locks: {recipe.locked_roles or '—'}")
+    console.print(f"  path: {path}")
+
+
+@app.command("recipe-list")
+def recipe_list(workspace: Path | None = typer.Option(None)) -> None:
+    """List saved recipe stubs."""
+    from backend.app.music.recipes import list_recipes
+
+    settings = _settings(None, workspace)
+    assets = AssetStore(settings)
+    recipes = list_recipes(assets)
+    if not recipes:
+        console.print("No recipes saved yet.")
+        return
+    table = Table(title="Recipes")
+    table.add_column("ID")
+    table.add_column("Name")
+    table.add_column("BPM")
+    table.add_column("Locks")
+    for r in recipes:
+        table.add_row(
+            str(r.id),
+            r.name,
+            str(r.groove_fingerprint.get("bpm", "—")),
+            ", ".join(r.locked_roles) or "—",
+        )
+    console.print(table)
+
+
 @app.command()
 def doctor() -> None:
     """Inspect local environment (safe checks only)."""
@@ -191,7 +241,6 @@ def doctor() -> None:
 def probe_daw() -> None:
     """Probe DAW bridge availability."""
     import platform
-    import shutil
     from pathlib import Path as P
 
     settings = get_settings()

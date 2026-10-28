@@ -17,15 +17,21 @@ from backend.app.models.schemas import (
     CandidatePackage,
     DawOperation,
     LoudnessNotes,
-    MusicProject,
     MusicalDiff,
+    MusicProject,
     ProjectStatus,
     ProjectVersion,
     new_id,
     utcnow,
 )
-from backend.app.music.brief import parse_brief
+from backend.app.music.brief import (
+    explicit_bpm_from_text,
+    explicit_genre_from_text,
+    explicit_key_from_text,
+    parse_brief,
+)
 from backend.app.music.coedit import (
+    add_end_fill,
     apply_role_locks,
     humanize_project,
     merge_preserving_locks,
@@ -92,7 +98,6 @@ def revise_project(
 
     parent = _load_cir(assets, project_id, parent_version_id or stored.version_id) or stored
     locks = parse_lock_roles_from_text(instruction)
-    # Also keep already-locked roles
     locks = sorted(set(locks) | {t.role.value for t in parent.tracks if t.locked})
     parent_locked = apply_role_locks(parent, locks)
 
@@ -102,14 +107,26 @@ def revise_project(
         bars=parent.length_bars,
         locked_roles=locks,
     )
-    # Preserve BPM/key from parent unless instruction overrides with explicit bpm/key already parsed
-    if "bpm" not in instruction.lower():
+
+    # Preserve parent musical identity unless instruction explicitly overrides
+    if explicit_bpm_from_text(instruction) is None:
         brief.bpm = parent.bpm
-    if not any(k in instruction.lower() for k in ("major", "minor", "#", "b")):
+    explicit_key = explicit_key_from_text(instruction)
+    if explicit_key is not None:
+        brief.key = explicit_key
+    else:
         brief.key = parent.key_estimate
+    if explicit_genre_from_text(instruction) is None and parent.generation_brief:
+        # Keep parent's genre template when revise text is lock/edit-only
+        from backend.app.music.templates import get_template
+
+        parent_genre = explicit_genre_from_text(parent.generation_brief or "")
+        if parent_genre:
+            brief.genre_template_id = parent_genre
+            tmpl = get_template(parent_genre)
+            brief.title = f"{tmpl.name} revise"
 
     regenerated = generate_from_brief(brief, name=parent.name + "-rev")
-    # Soften bass heuristic
     if "soften bass" in instruction.lower() or "softer bass" in instruction.lower():
         for t in regenerated.tracks:
             if t.role.value == "bass":
@@ -122,7 +139,11 @@ def revise_project(
         regenerated = humanize_project(regenerated, seed=brief.seed or 0)
 
     merged = merge_preserving_locks(parent_locked, regenerated)
+    if "fill" in instruction.lower():
+        merged = add_end_fill(merged, before_bar=merged.length_bars)
     merged.id = parent.id
+    merged.recipe_id = parent.recipe_id
+    merged.brief_id = parent.brief_id
     merged.generation_brief = instruction
     merged.updated_at = utcnow()
     merged.status = ProjectStatus.APPLYING
@@ -140,7 +161,6 @@ def revise_project(
     daw.connect()
     snapshot_ref = None
     if isinstance(daw, FakeDawAdapter):
-        # Load parent into fake DAW then snapshot
         daw.create_or_update_notes(parent_locked)
         snap = daw.save_snapshot("pre-revise")
         snapshot_ref = snap.observations.get("snapshot_ref")
@@ -161,11 +181,13 @@ def revise_project(
         user_message=instruction,
         one_line_diff=musical_diff.one_line_summary,
         musical_diff=musical_diff,
+        recipe_id=merged.recipe_id,
         created_at=utcnow(),
         restorable=True,
     )
     merged.version_id = version.id
     merged.status = ProjectStatus.COMPLETED
+    musical_diff.to_version_id = version.id
     repo.save_project(merged)
     repo.save_version(version, merged.id)
 
@@ -182,12 +204,42 @@ def revise_project(
         seed=int(merged.seed or 0),
         cir_snapshot_ref=cir_ref,
         midi_paths=[str(p) for p in midi_paths.values()],
-        loudness_notes=LoudnessNotes(normalization_status="manual_required"),
+        loudness_notes=LoudnessNotes(
+            target_lufs=-14.0,
+            normalization_status="manual_required"
+            if settings.daw_mode != DawMode.SIMULATION
+            else "n/a",
+        ),
         one_line_diff=musical_diff.one_line_summary,
         musical_diff_id=musical_diff.id,
         parent_version_id=parent.version_id,
     )
+    assets.write_json(
+        f"projects/{merged.id}/candidate_{candidate.id}.json",
+        candidate.model_dump(mode="json"),
+    )
+
     next_moves = propose_next_moves(merged, diff=musical_diff)
+    meta = {
+        "project_id": str(merged.id),
+        "version_id": str(version.id),
+        "parent_version_id": str(parent.version_id) if parent.version_id else None,
+        "seed": merged.seed,
+        "bpm": merged.bpm,
+        "key": merged.key_estimate,
+        "bars": merged.length_bars,
+        "recipe_id": str(merged.recipe_id) if merged.recipe_id else None,
+        "candidate": candidate.model_dump(mode="json"),
+        "musical_diff": musical_diff.model_dump(mode="json"),
+        "next_moves": [o.model_dump(mode="json") for o in next_moves],
+        "daw": daw_result.as_dict(),
+        "snapshot_ref": snapshot_ref,
+        "mode": settings.daw_mode.value,
+        "schema_version": merged.schema_version,
+        "instruction": instruction,
+    }
+    assets.write_json(f"projects/{merged.id}/metadata.json", meta)
+
     log_event(
         logger,
         "revise.done",

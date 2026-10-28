@@ -70,6 +70,7 @@ def compose_from_brief(
 
     project = generate_from_brief(brief, name=name)
     project.brief_id = brief.id
+    project.recipe_id = brief.recipe_id
     brief.project_id = project.id
     assert_eight_bars_span(project)
 
@@ -110,6 +111,7 @@ def compose_from_brief(
         exported_midi_paths=[str(p) for p in midi_paths.values()],
         user_message=brief.free_text,
         one_line_diff=one_line,
+        recipe_id=project.recipe_id,
         created_at=utcnow(),
         restorable=True,
     )
@@ -148,6 +150,7 @@ def compose_from_brief(
         "bpm": project.bpm,
         "key": project.key_estimate,
         "bars": project.length_bars,
+        "recipe_id": str(project.recipe_id) if project.recipe_id else None,
         "candidate": candidate.model_dump(mode="json"),
         "next_moves": [o.model_dump(mode="json") for o in next_moves],
         "daw": daw_result.as_dict(),
@@ -187,8 +190,11 @@ def compose_from_prompt(
     settings: Settings | None = None,
     adapter: DawAdapter | None = None,
     locked_roles: list[str] | None = None,
+    recipe_id: UUID | None = None,
 ) -> ComposeResult:
     brief = parse_brief(prompt, seed=seed, bars=bars, locked_roles=locked_roles)
+    if recipe_id is not None:
+        brief.recipe_id = recipe_id
     return compose_from_brief(brief, settings=settings, adapter=adapter)
 
 

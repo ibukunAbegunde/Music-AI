@@ -21,14 +21,14 @@ Phase 1 **simulation / midi_export exit met**. NL/brief → 8-bar editable MIDI 
 | FakeDaw snapshot/verify/undo | Real in-memory |
 | MidiExport `.mid` files | Real Standard MIDI |
 | `music-ai compose` / `revise` | Real CLI |
-| pytest (28) | Passing |
+| pytest (36) | Passing |
 
 ## What is stubbed
 
 | Item | Notes |
 |------|-------|
 | Critic next moves | Heuristic PatchOps, not render-aware |
-| Recipe save/load UX | Schema only |
+| Recipe apply / kit panel | Schema + save/load stubs (`recipe-save` / `recipe-list`); apply in Phase 3 |
 | AuditionRequest | Schema stub |
 | Listening journal | Schema only |
 | Brief canvas UI / DAW drawer / loop strip | Data model only; CLI surfaces |
