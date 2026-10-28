@@ -79,6 +79,15 @@ class ProjectRepository:
             )
             return [ProjectVersion.model_validate(json.loads(r.payload_json)) for r in rows]
 
+    def list_projects(self) -> list[MusicProject]:
+        with self._sf() as session:
+            rows = (
+                session.query(ProjectRecord)
+                .order_by(ProjectRecord.updated_at.desc())
+                .all()
+            )
+            return [MusicProject.model_validate(json.loads(r.payload_json)) for r in rows]
+
     def create_job(self, kind: str, project_id: UUID | None = None, detail: dict | None = None) -> str:
         with self._sf() as session:
             row = JobRecord(
@@ -90,3 +99,66 @@ class ProjectRepository:
             session.add(row)
             session.commit()
             return row.id
+
+    def get_job(self, job_id: str) -> dict | None:
+        with self._sf() as session:
+            row = session.get(JobRecord, job_id)
+            if row is None:
+                return None
+            return {
+                "id": row.id,
+                "project_id": row.project_id,
+                "kind": row.kind,
+                "status": row.status,
+                "detail": json.loads(row.detail_json or "{}"),
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+                "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+            }
+
+    def list_jobs(self, *, limit: int = 50) -> list[dict]:
+        with self._sf() as session:
+            rows = (
+                session.query(JobRecord)
+                .order_by(JobRecord.created_at.desc())
+                .limit(limit)
+                .all()
+            )
+            return [
+                {
+                    "id": r.id,
+                    "project_id": r.project_id,
+                    "kind": r.kind,
+                    "status": r.status,
+                    "detail": json.loads(r.detail_json or "{}"),
+                    "created_at": r.created_at.isoformat() if r.created_at else None,
+                    "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+                }
+                for r in rows
+            ]
+
+    def update_job(
+        self,
+        job_id: str,
+        *,
+        status: str | None = None,
+        detail: dict | None = None,
+    ) -> dict | None:
+        with self._sf() as session:
+            row = session.get(JobRecord, job_id)
+            if row is None:
+                return None
+            if status is not None:
+                row.status = status
+            if detail is not None:
+                row.detail_json = json.dumps(detail)
+            row.updated_at = utcnow()
+            session.commit()
+            return {
+                "id": row.id,
+                "project_id": row.project_id,
+                "kind": row.kind,
+                "status": row.status,
+                "detail": json.loads(row.detail_json or "{}"),
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+                "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+            }

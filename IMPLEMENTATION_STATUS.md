@@ -62,7 +62,11 @@ Current phase: **Phase 6 — Autonomous full-length (simulation / MIDI)**
 | Scratch vs Release compose gate | ✅ | mock-tested (Release blocks DAW write) |
 | Instrument palette hints | ✅ | mock-tested |
 | AuditionRequest / sound match | 🚧 schema stub | — |
-| Full brief-canvas UI / DAW approval drawer UI | ❌ | — |
+| FastAPI local API (compose/revise/ref/full/jobs) | ✅ | mock-tested |
+| React+Vite UI (Workspace / Refs / A/B / Jobs / Settings) | ✅ | build + API smoke |
+| Brief canvas + role-lock controls (UI scaffold) | ✅ | wired to parse/compose/revise |
+| Version timeline + A/B musical diff (UI) | ✅ | wired to existing services |
+| DAW approval drawer UI | 🚧 stub next-moves list | — |
 | Live loop strip / sound-library audition | ❌ | deferred |
 | Live PostFader / FL Studio | ❌ | blocked (N/A on Linux CI) |
 | Audio embeddings (CLAP/MERT) | 🚧 interface only | deferred (approval flag) |
@@ -86,8 +90,8 @@ Current phase: **Phase 6 — Autonomous full-length (simulation / MIDI)**
 
 ## Next
 
-1. Phase 7 research upgrades (only after Phase 6 review/merge).
+1. Phase 7 research upgrades (optional research track).
 2. Wire live bounce metrics on Mac when PostFader probed.
 3. Optional Demucs / Basic Pitch / audio encoder only after explicit approval (see `docs/audio-models.md`).
 4. Collect real listening pairwise data to replace/augment `taste-simulate`.
-5. Sound-library loudness-matched audition + brief-canvas UI (product surfaces).
+5. Live loop strip + loudness-matched audition + DAW approval drawer polish.

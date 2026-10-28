@@ -69,3 +69,21 @@ class ReferenceRepository:
             if row is None:
                 return None
             return ReferenceAsset.model_validate(json.loads(row.payload_json))
+
+    def list_all(self) -> list[tuple[ReferenceAsset, ReferenceProfile | None]]:
+        with self._sf() as session:
+            rows = (
+                session.query(ReferenceRecord)
+                .order_by(ReferenceRecord.created_at.desc())
+                .all()
+            )
+            out: list[tuple[ReferenceAsset, ReferenceProfile | None]] = []
+            for row in rows:
+                asset = ReferenceAsset.model_validate(json.loads(row.payload_json))
+                profile = (
+                    ReferenceProfile.model_validate_json(row.profile_json)
+                    if row.profile_json
+                    else None
+                )
+                out.append((asset, profile))
+            return out
