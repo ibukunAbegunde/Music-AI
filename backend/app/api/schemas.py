@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class HealthResponse(BaseModel):
@@ -26,13 +26,30 @@ class BriefParseRequest(BaseModel):
 class ComposeRequest(BaseModel):
     prompt: str
     seed: int | None = None
-    bars: int = Field(default=8, ge=8, le=16)
+    # Wide field bound; mode-aware check below (loop 8–16, full 32–256).
+    bars: int = Field(default=8, ge=8, le=256)
     locked_roles: list[str] = Field(default_factory=list)
     recipe_id: UUID | None = None
     mode: Literal["loop", "full"] = "loop"
     structure_id: str | None = None
     scratch_or_release: Literal["scratch", "release"] = "scratch"
     autonomy_mode: Literal["suggest-only", "collaborative", "autonomous"] = "collaborative"
+    # When non-empty → reference-conditioned path (loop: ref-compose; full: full_compose_from_reference).
+    traits: list[str] = Field(default_factory=list)
+    fixture: str = "afrobeats"
+
+    @model_validator(mode="after")
+    def bars_match_mode(self) -> ComposeRequest:
+        if self.mode == "full":
+            # Coerce loop default (8) / undersized values to the full-length default.
+            if self.bars < 32:
+                self.bars = 64
+            if self.bars > 256:
+                raise ValueError("full mode bars must be 32–256")
+        else:
+            if self.bars < 8 or self.bars > 16:
+                raise ValueError("loop mode bars must be 8–16")
+        return self
 
 
 class ReviseRequest(BaseModel):

@@ -21,7 +21,10 @@ from backend.app.music.brief import parse_brief
 from backend.app.music.templates import list_templates
 from backend.app.services.ab_compare import compare_candidates, compare_session_pair
 from backend.app.services.compose import compose_from_prompt, load_project_metadata
-from backend.app.services.full_compose import full_compose_from_prompt
+from backend.app.services.full_compose import (
+    full_compose_from_prompt,
+    full_compose_from_reference,
+)
 from backend.app.services.reference_compose import compose_from_reference
 from backend.app.services.revise import revise_project
 from backend.app.services.versions import list_version_timeline, restore_version
@@ -92,28 +95,73 @@ def get_project(project_id: UUID) -> dict:
 def compose(body: ComposeRequest) -> dict:
     settings = settings_dep()
     repo = projects_repo()
+    job_kind = "full-compose" if body.mode == "full" else ("ref-compose" if body.traits else "compose")
     job_id = repo.create_job(
-        "full-compose" if body.mode == "full" else "compose",
-        detail={"prompt": body.prompt, "mode": body.mode},
+        job_kind,
+        detail={"prompt": body.prompt, "mode": body.mode, "traits": body.traits},
     )
     try:
         if body.mode == "full":
-            result = full_compose_from_prompt(
-                body.prompt,
-                seed=body.seed,
-                structure_id=body.structure_id,
-                bars=body.bars if body.bars >= 16 else None,
-                scratch_or_release=body.scratch_or_release,
-                autonomy_mode=body.autonomy_mode,
-                settings=settings,
-                locked_roles=body.locked_roles or None,
-            )
+            if body.traits:
+                result = full_compose_from_reference(
+                    body.prompt,
+                    traits=body.traits,
+                    fixture=body.fixture,
+                    seed=body.seed,
+                    structure_id=body.structure_id,
+                    bars=body.bars,
+                    scratch_or_release=body.scratch_or_release,
+                    autonomy_mode=body.autonomy_mode,
+                    settings=settings,
+                    locked_roles=body.locked_roles or None,
+                )
+            else:
+                result = full_compose_from_prompt(
+                    body.prompt,
+                    seed=body.seed,
+                    structure_id=body.structure_id,
+                    bars=body.bars,
+                    scratch_or_release=body.scratch_or_release,
+                    autonomy_mode=body.autonomy_mode,
+                    settings=settings,
+                    locked_roles=body.locked_roles or None,
+                )
             payload = _compose_payload(result)
             payload["arrangement"] = {
                 "plan": result.plan.model_dump(mode="json"),
                 "manual_steps": result.manual_steps,
                 "gated": result.gated,
             }
+            project_id = result.project.id
+            version_id = result.version.id
+        elif body.traits:
+            # Workspace borrow chips → reference-conditioned loop (single baseline).
+            ref = compose_from_reference(
+                body.prompt,
+                traits=body.traits,
+                fixture_genre=body.fixture,
+                n=1,
+                seed=body.seed,
+                bars=body.bars,
+                settings=settings,
+                locked_roles=body.locked_roles or None,
+                recipe_id=body.recipe_id,
+            )
+            baseline = ref.multi.baseline
+            payload = {
+                "project": baseline.project.model_dump(mode="json"),
+                "version": baseline.version.model_dump(mode="json"),
+                "brief": ref.multi.brief.model_dump(mode="json"),
+                "candidate": baseline.candidate.model_dump(mode="json"),
+                "midi_paths": _paths_to_str(baseline.midi_paths),
+                "next_moves": [o.model_dump(mode="json") for o in (baseline.next_moves or [])],
+                "daw": None,
+                "snapshot_ref": None,
+                "traits": ref.traits,
+                "conditioning": ref.multi.conditioning,
+            }
+            project_id = baseline.project.id
+            version_id = baseline.version.id
         else:
             result = compose_from_prompt(
                 body.prompt,
@@ -124,14 +172,17 @@ def compose(body: ComposeRequest) -> dict:
                 recipe_id=body.recipe_id,
             )
             payload = _compose_payload(result)
+            project_id = result.project.id
+            version_id = result.version.id
         repo.update_job(
             job_id,
             status="completed",
             detail={
                 "prompt": body.prompt,
                 "mode": body.mode,
-                "project_id": str(result.project.id),
-                "version_id": str(result.version.id),
+                "traits": body.traits,
+                "project_id": str(project_id),
+                "version_id": str(version_id),
             },
         )
         payload["job_id"] = job_id

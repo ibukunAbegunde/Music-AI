@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "ai-music-producer"
 version = "0.5.0"
-description = "Private local-first AI music producer — Phase 0–5 (refs, critic, personal taste)"
+description = "Private local-first AI music producer — Phase 0–6 + local FastAPI/React UI"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "Proprietary — personal use" }

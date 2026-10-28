@@ -114,10 +114,10 @@ export function BriefCanvas({
             <span className="uppercase tracking-wider text-ink-muted">Bars</span>
             <Input
               type="number"
-              min={mode === 'full' ? 16 : 8}
-              max={mode === 'full' ? 128 : 16}
+              min={mode === 'full' ? 32 : 8}
+              max={mode === 'full' ? 256 : 16}
               value={bars}
-              onChange={(e) => onBarsChange(Number(e.target.value) || 8)}
+              onChange={(e) => onBarsChange(Number(e.target.value) || (mode === 'full' ? 64 : 8))}
             />
           </label>
           <label className="space-y-1 text-xs">

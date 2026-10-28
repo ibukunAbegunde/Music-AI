@@ -1,6 +1,6 @@
 # Architecture — Private AI Music Producer
 
-Version: 0.4.0 (Phase 0–4) | Spec: build spec **v1.1** + `product-upgrades-v1.1.md` (Agent Store)
+Version: 0.5.0 (Phase 0–6 + local API/UI) | Spec: build spec **v1.1** + `product-upgrades-v1.1.md` (Agent Store)
 
 ## Purpose
 
@@ -9,16 +9,17 @@ Local-first, reference-aware music production assistant for a single user on App
 ## High-level diagram
 
 ```
- CLI (Phase 0–4) / future Local API + UI
+ CLI + Local FastAPI (`backend/app/api`) + Vite React UI (`frontend/`)
               |
-  compose / ref-pipeline / ref-compose / candidates / revise / ab / critique / revise-loop
+  compose / full-compose / ref-pipeline / ref-compose / candidates / revise / ab / critique / revise-loop
        |              |                |              |              |
   conditioning   audio/*          storage         daw adapters   render_eval + critic
   + generators   ingest/analyse   (SQLite +       FakeDaw |      (fixtures / CIR sim
   brief/diff     separators/*     workspace/)     MidiExport |   → typed PatchOps)
   coedit/patch   transcription/*                  PostFader*)
+  arrangement/*  (Phase 6 full-length)
        \____________|________________|______________|______________/
-         MusicProject (CIR) + ReferenceProfile + CandidatePackage
+         MusicProject (CIR) + ReferenceProfile + CandidatePackage + ArrangementPlan
 ```
 
 \* PostFader is **not** available in the cloud Linux VM; documented for the user's Mac only.  
@@ -28,7 +29,7 @@ Local-first, reference-aware music production assistant for a single user on App
 
 | Module | Role | Status |
 |--------|------|--------|
-| `api` | Local HTTP / events | Deferred (CLI only) |
+| `api` | Local HTTP (FastAPI) for React UI | **Shipped** — thin wrappers over compose / full / ref / A/B / jobs |
 | `orchestrator` | Task state machine | Compose / reference / candidates / revise / revision_loop |
 | `llm` | Tool-using providers | Stub / unused |
 | `audio` | Ingest, analyse, stems + reference analyzer protocol/fixtures | **Phase 2** (sim) + Phase 3 fixtures |
@@ -41,7 +42,7 @@ Local-first, reference-aware music production assistant for a single user on App
 | `render_eval` | Bounce / mix analysis | **Technical + musical + fixtures** |
 | `assets` | Sample/VST manifest | Workspace paths |
 | `storage` | SQLite, versions, refs | Projects + versions + references + sessions + renders |
-| `ui` | React local UI | Not started |
+| `ui` | React local UI (Vite/TS) | **Shipped** — Workspace / References / Candidates / Jobs / Settings |
 
 ## Core data contracts
 

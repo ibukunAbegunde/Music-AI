@@ -105,14 +105,17 @@ export function WorkspacePage() {
     setComposing(true)
     setError(null)
     try {
+      const effectiveBars = mode === 'full' ? Math.max(bars, 32) : Math.min(Math.max(bars, 8), 16)
+      // Borrow chips → compose (loop: ref-conditioned baseline; full: full_compose_from_reference).
       const composed = await api.compose({
         prompt,
         seed: seed ? Number(seed) : null,
-        bars: mode === 'full' ? Math.max(bars, 16) : bars,
+        bars: effectiveBars,
         locked_roles: lockedRoles,
         mode,
         scratch_or_release: scratchOrRelease,
         autonomy_mode: 'collaborative',
+        ...(borrowTraits.length ? { traits: borrowTraits } : {}),
       })
       setResult(composed)
       setBrief(composed.brief)
@@ -199,7 +202,7 @@ export function WorkspacePage() {
         mode={mode}
         onModeChange={(m) => {
           setMode(m)
-          setBars((b) => (m === 'full' ? Math.max(b, 32) : Math.min(b, 16)))
+          setBars((b) => (m === 'full' ? (b >= 32 ? b : 64) : Math.min(Math.max(b, 8), 16)))
         }}
         scratchOrRelease={scratchOrRelease}
         onScratchChange={setScratchOrRelease}

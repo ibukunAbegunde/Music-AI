@@ -124,3 +124,74 @@ def test_demo_reference_pipeline(client: TestClient) -> None:
     listed = client.get("/api/references")
     assert listed.status_code == 200
     assert any(x["asset"]["id"] == body["asset"]["id"] for x in listed.json())
+
+
+def test_compose_full_mode(client: TestClient) -> None:
+    """Full-length compose must accept bars≥32 (no 422 le=16 / 400 clash)."""
+    r = client.post(
+        "/api/compose",
+        json={
+            "prompt": "mellow Afrobeats full instrumental arrangement",
+            "seed": 11,
+            "bars": 32,
+            "mode": "full",
+            "scratch_or_release": "scratch",
+            "autonomy_mode": "collaborative",
+        },
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["project"]["length_bars"] >= 32
+    assert body["arrangement"]["plan"]
+    assert body["job_id"]
+    # Scratch + collaborative → not gated for DAW write in simulation.
+    assert body["arrangement"]["gated"] is False
+
+    # Undersized bars with mode=full coerce to default 64 (not 422).
+    coerced = client.post(
+        "/api/compose",
+        json={
+            "prompt": "full length coerce bars",
+            "seed": 12,
+            "bars": 8,
+            "mode": "full",
+            "scratch_or_release": "scratch",
+        },
+    )
+    assert coerced.status_code == 200, coerced.text
+    assert coerced.json()["project"]["length_bars"] >= 32
+
+    # Release + autonomous without force → gated (honest release gate).
+    gated = client.post(
+        "/api/compose",
+        json={
+            "prompt": "release gated full",
+            "seed": 13,
+            "bars": 32,
+            "mode": "full",
+            "scratch_or_release": "release",
+            "autonomy_mode": "autonomous",
+        },
+    )
+    assert gated.status_code == 200, gated.text
+    assert gated.json()["arrangement"]["gated"] is True
+
+
+def test_compose_with_borrow_traits(client: TestClient) -> None:
+    """Workspace borrow chips must condition generation (not decorative)."""
+    r = client.post(
+        "/api/compose",
+        json={
+            "prompt": "original mellow Afrobeats with bass bounce",
+            "seed": 21,
+            "bars": 8,
+            "mode": "loop",
+            "traits": ["bass_bounce", "groove"],
+        },
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["traits"] == ["bass_bounce", "groove"]
+    chip_traits = {c["trait"] for c in body["brief"]["borrow_chips"]}
+    assert "bass_bounce" in chip_traits
+    assert body["candidate"]["one_line_diff"]
