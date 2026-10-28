@@ -68,10 +68,34 @@ class RightsPolicy(BaseModel):
 
 
 class AutonomyPolicy(BaseModel):
-    mode: str = "collaborative"  # suggest-only | collaborative | autonomous
+    mode: str = "collaborative"  # suggest-only | collaborative | autonomous — collaborative is default
     max_generations: int = 4
     max_renders: int = 4
     require_approval_for_writes: bool = True
+    scratch_or_release: str = "scratch"  # scratch | release
+
+
+class BarRange(BaseModel):
+    start_bar: int = Field(ge=1)
+    end_bar: int = Field(ge=1)
+
+
+class BorrowChip(BaseModel):
+    reference_id: UUID | None = None
+    trait: str
+    weight: float = Field(default=1.0, ge=0, le=1)
+
+
+class EnergyPoint(BaseModel):
+    bar: int = Field(ge=1)
+    value: float = Field(ge=0, le=1)
+
+
+class SectionDraft(BaseModel):
+    name: str
+    start_bar: int = Field(ge=1)
+    end_bar: int = Field(ge=1)
+    intensity_target: float = Field(default=0.5, ge=0, le=1)
 
 
 class NoteEvent(BaseModel):
@@ -105,7 +129,9 @@ class MusicTrack(BaseModel):
     mixer_slot: int | None = None
     enabled: bool = True
     locked: bool = False
+    locked_bar_ranges: list[BarRange] = Field(default_factory=list)
     source_reference_id: UUID | None = None
+    source_stem_id: UUID | None = None
     tags: list[str] = Field(default_factory=list)
     constraints: dict[str, Any] = Field(default_factory=dict)
 
@@ -153,7 +179,9 @@ class MusicProject(BaseModel):
     rights_policy: RightsPolicy = Field(default_factory=RightsPolicy)
     autonomy_policy: AutonomyPolicy = Field(default_factory=AutonomyPolicy)
     seed: int | None = None
-    schema_version: str = "0.1.0"
+    brief_id: UUID | None = None
+    recipe_id: UUID | None = None
+    schema_version: str = "0.2.0"
 
 
 class ReferenceAsset(BaseModel):
@@ -216,9 +244,64 @@ class StemAsset(BaseModel):
     lineage: dict[str, Any] = Field(default_factory=dict)
 
 
+class BriefDocument(BaseModel):
+    """Constraint-first creative brief (canvas source of truth)."""
+
+    id: UUID = Field(default_factory=new_id)
+    project_id: UUID | None = None
+    title: str = "untitled brief"
+    free_text: str = ""
+    bpm: float | None = Field(default=None, gt=0)
+    bpm_range: tuple[float, float] | None = None
+    key: str | None = None
+    meter: str = "4/4"
+    genre_template_id: str | None = None
+    energy_curve: list[EnergyPoint] = Field(default_factory=list)
+    borrow_chips: list[BorrowChip] = Field(default_factory=list)
+    section_map: list[SectionDraft] = Field(default_factory=list)
+    novelty: float = Field(default=0.4, ge=0, le=1)
+    length_bars: int = Field(default=8, ge=1)
+    locked_roles: list[str] = Field(default_factory=list)
+    recipe_id: UUID | None = None
+    scratch_or_release: str = "scratch"
+    autonomy_mode: str = "collaborative"
+    seed: int | None = None
+    created_at: datetime = Field(default_factory=utcnow)
+    updated_at: datetime = Field(default_factory=utcnow)
+
+
+class GenreTemplate(BaseModel):
+    id: str
+    name: str
+    default_bpm: float
+    bpm_range: tuple[float, float]
+    typical_key_modes: list[str] = Field(default_factory=list)
+    section_map: list[SectionDraft] = Field(default_factory=list)
+    role_defaults: list[str] = Field(default_factory=list)
+    groove_density: float = Field(default=0.5, ge=0, le=1)
+    progression_key: str = "default"
+    notes: str | None = None
+
+
+class Recipe(BaseModel):
+    id: UUID = Field(default_factory=new_id)
+    name: str
+    genre_tags: list[str] = Field(default_factory=list)
+    groove_fingerprint: dict[str, Any] = Field(default_factory=dict)
+    palette_asset_ids: list[UUID] = Field(default_factory=list)
+    arrangement_skeleton: list[SectionDraft] = Field(default_factory=list)
+    locked_roles: list[str] = Field(default_factory=list)
+    brief_snapshot: dict[str, Any] = Field(default_factory=dict)
+    cir_snapshot_ref: str | None = None
+    source_project_id: UUID | None = None
+    approved: bool = False
+    created_at: datetime = Field(default_factory=utcnow)
+
+
 class ProductionPlan(BaseModel):
     id: UUID = Field(default_factory=new_id)
     project_id: UUID
+    brief_id: UUID | None = None
     user_goal: str
     target_features: dict[str, Any] = Field(default_factory=dict)
     reference_features_to_keep: list[str] = Field(default_factory=list)
@@ -234,15 +317,22 @@ class DawOperation(BaseModel):
     operation_id: UUID = Field(default_factory=new_id)
     action_type: str
     target_track_id: UUID | None = None
+    target_role: str | None = None
     parameters: dict[str, Any] = Field(default_factory=dict)
     prerequisite_state: dict[str, Any] = Field(default_factory=dict)
     idempotency_key: str
     expected_postcondition: dict[str, Any] = Field(default_factory=dict)
     risk_level: str = "low"
     requires_approval: bool = True
+    predicted_impact: str | None = None
+    explanation: str | None = None
     observed_result: dict[str, Any] | None = None
     verification_status: str = "pending"
     rollback_reference: str | None = None
+
+
+# Alias: critic emits PatchOps ≡ DawOperation
+PatchOp = DawOperation
 
 
 class Render(BaseModel):
@@ -284,6 +374,40 @@ class Evaluation(BaseModel):
     human_override: float | None = None
 
 
+class LoudnessNotes(BaseModel):
+    target_lufs: float | None = -14.0
+    measured_lufs: float | None = None
+    normalization_status: str = "pending"  # pending | applied | manual_required | n/a
+
+
+class MusicalDiff(BaseModel):
+    id: UUID = Field(default_factory=new_id)
+    from_version_id: UUID | None = None
+    to_version_id: UUID | None = None
+    roles_changed: list[str] = Field(default_factory=list)
+    note_count_delta_by_role: dict[str, int] = Field(default_factory=dict)
+    density_delta: float = 0.0
+    harmony_delta_notes: list[str] = Field(default_factory=list)
+    groove_delta_notes: list[str] = Field(default_factory=list)
+    locked_roles_respected: bool = True
+    one_line_summary: str = ""
+    details: list[str] = Field(default_factory=list)
+
+
+class CandidatePackage(BaseModel):
+    id: UUID = Field(default_factory=new_id)
+    project_id: UUID
+    version_id: UUID
+    seed: int
+    cir_snapshot_ref: str
+    midi_paths: list[str] = Field(default_factory=list)
+    render_id: UUID | None = None
+    loudness_notes: LoudnessNotes = Field(default_factory=LoudnessNotes)
+    one_line_diff: str = ""
+    musical_diff_id: UUID | None = None
+    parent_version_id: UUID | None = None
+
+
 class ProjectVersion(BaseModel):
     id: UUID = Field(default_factory=new_id)
     parent_version_id: UUID | None = None
@@ -293,8 +417,31 @@ class ProjectVersion(BaseModel):
     rendered_audio_path: str | None = None
     operation_ids: list[UUID] = Field(default_factory=list)
     user_message: str | None = None
+    one_line_diff: str | None = None
+    musical_diff: MusicalDiff | None = None
+    recipe_id: UUID | None = None
     created_at: datetime = Field(default_factory=utcnow)
     restorable: bool = True
+
+
+class ListeningJournalEntry(BaseModel):
+    id: UUID = Field(default_factory=new_id)
+    project_id: UUID
+    version_id: UUID | None = None
+    notes: str = ""
+    tags: list[str] = Field(default_factory=list)
+    rating: float | None = Field(default=None, ge=0, le=5)
+    created_at: datetime = Field(default_factory=utcnow)
+
+
+class AuditionRequest(BaseModel):
+    """Stub: loudness-matched in-loop sound audition (Phase 3+ wiring)."""
+
+    id: UUID = Field(default_factory=new_id)
+    asset_ids: list[UUID] = Field(default_factory=list)
+    context_project_version_id: UUID | None = None
+    loudness_match: bool = True
+    in_loop_context: bool = True
 
 
 class AssetManifest(BaseModel):

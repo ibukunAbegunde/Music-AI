@@ -1,47 +1,39 @@
 # Private AI Music Producer
 
-Local-first AI music production assistant (Phase 0). Describe a groove → get reproducible **8-bar drum / bass / chord MIDI** plus project metadata. FL Studio integration is adapter-based: **simulation** and **MIDI manual-import** work today; live PostFader control is for the user’s Apple Silicon Mac after probing.
+Local-first AI music production assistant. **Spec v1.1** — constraint-first briefs, role-locks, musical diffs, candidate packaging. CIR/MIDI is the system of record; neural audio dual-path is allowed later without delaying models for product reasons.
 
-> Phase 0 only. No stem separation, taste model, or live DAW writes are claimed.
+> Phase 0 + Phase 1 (simulation / MIDI manual-import). No live FL Studio claimed on Linux CI.
 
 ## Requirements
 
 - Python **3.11** or **3.12**
-- macOS + FL Studio optional (required only for live DAW later)
-- Linux CI / cloud agents run in **simulation mode** (FL Studio / PostFader / IAC = N/A)
+- macOS + FL Studio optional (live DAW later)
 
 ## Quick start
 
 ```bash
 python3.12 -m venv .venv
-source .venv/bin/activate   # Windows: .venv\Scripts\activate
+source .venv/bin/activate
 pip install -e ".[dev]"
 cp .env.example .env
 mkdir -p workspace
+pytest
 ```
 
-### Doctor (safe environment checks)
+### Phase 1 demo
 
 ```bash
-python -m scripts.doctor
-# or
 music-ai doctor
-music-ai probe-daw
-```
-
-### Generate an 8-bar loop
-
-```bash
+music-ai templates
+music-ai brief "mellow Afrobeats 110 BPM in A minor with Rhodes chords"
 music-ai compose "mellow Afrobeats 110 BPM in A minor" --seed 42
-```
-
-MIDI lands in `workspace/midi/<project-id>/` (`drums.mid`, `bass.mid`, `chord.mid`, `combined.mid`). Metadata: `workspace/projects/<project-id>/metadata.json`.
-
-Manual-import mode (explicit FL Studio instructions):
-
-```bash
 music-ai compose "Amapiano 112 BPM" --seed 7 --mode midi_export
+
+# Revise with role-locks (paste project id from compose output)
+music-ai revise <project-id> "keep the drums, soften bass" --seed 43
 ```
+
+Outputs under `workspace/midi/<id>/` and `workspace/projects/<id>/` (metadata, brief, CIR snapshot, candidate package, diffs).
 
 ### Tests
 
@@ -49,39 +41,28 @@ music-ai compose "Amapiano 112 BPM" --seed 7 --mode midi_export
 pytest
 ```
 
-## Project layout
+## What's in Phase 1
 
-```
-backend/app/          # schemas, music generators, daw adapters, CLI, storage
-docs/                 # architecture, capabilities, macOS+FL setup
-scripts/doctor.py     # environment probe
-tests/                # unit + integration
-workspace/            # gitignored local DB, MIDI, future audio
-IMPLEMENTATION_STATUS.md
-PHASE_0_REPORT.md
-```
+**Real:** BriefDocument parser, genre templates, richer generators, role-locks, MusicalDiff, CandidatePackage, FakeDaw verify/undo, MidiExport, compose/revise CLI, critic PatchOp stubs.
 
-## Configuration
-
-See `.env.example`. Important flags:
-
-| Variable | Meaning |
-|----------|---------|
-| `DAW_MODE` | `simulation` (default) \| `midi_export` \| `postfader` (Mac only, after probe) |
-| `WORKSPACE_DIR` | Local artifact root (default `workspace`) |
-| `ALLOW_CLOUD_AUDIO` | Keep `false` unless you opt in |
-| `ALLOW_CLOUD_LLM` | Keep `false` unless you opt in |
+**Stubbed:** Recipe UX, listening journal, audition-in-context, full PatchOp executor, React brief canvas / DAW drawer UI, live PostFader.
 
 ## Docs
 
 - [Architecture](docs/architecture.md)
 - [Tool capabilities](docs/tool-capabilities.md)
 - [macOS + FL Studio setup](docs/setup-macos-fl-studio.md)
-- [Phase 0 report](PHASE_0_REPORT.md)
-- [Implementation status](IMPLEMENTATION_STATUS.md)
+- [PHASE_0_REPORT.md](PHASE_0_REPORT.md) · [PHASE_1_REPORT.md](PHASE_1_REPORT.md)
+- [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md)
+
+Product store (source of truth): build spec **v1.1** + `product-upgrades-v1.1.md`.
+
+## Config
+
+See `.env.example`. `DAW_MODE=simulation|midi_export|postfader`. Keep `ALLOW_CLOUD_AUDIO=false` unless you opt in.
 
 ## Safety
 
-- No large model installs or dataset downloads in Phase 0.
-- No user audio or credentials in git (`workspace/`, `.env`, media extensions ignored).
-- Do not treat simulation success as live FL Studio control.
+- No large model installs without approval.
+- Simulation success ≠ live FL control.
+- `workspace/`, `.env`, and user audio are gitignored.

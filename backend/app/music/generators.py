@@ -1,13 +1,12 @@
-"""Deterministic 8-bar drum / bass / chord generators (Phase 0)."""
+"""Deterministic drum / bass / chord generators (Phase 1)."""
 
 from __future__ import annotations
 
-import hashlib
-import re
-from dataclasses import dataclass
 from random import Random
 
 from backend.app.models.schemas import (
+    AutonomyPolicy,
+    BriefDocument,
     DrumEvent,
     MusicProject,
     MusicTrack,
@@ -18,9 +17,11 @@ from backend.app.models.schemas import (
     new_id,
     utcnow,
 )
+from backend.app.music.brief import parse_brief
+from backend.app.music.coedit import apply_role_locks
+from backend.app.music.templates import get_template
 from backend.app.music.theory import PROGRESSIONS, beats_per_bar, parse_key, scale_pitch, triad
 
-# General MIDI drum map (channel 9 / 10)
 GM_DRUM = {
     "kick": 36,
     "snare": 38,
@@ -31,98 +32,35 @@ GM_DRUM = {
 }
 
 
-@dataclass(frozen=True)
-class PromptIntent:
-    genre: str
-    bpm: float
-    key: str
-    bars: int
-    mood: str
-    seed: int
-    brief: str
-
-
-def seed_from_prompt(prompt: str, explicit_seed: int | None = None) -> int:
-    if explicit_seed is not None:
-        return explicit_seed
-    digest = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
-    return int(digest[:8], 16)
-
-
-def parse_prompt(prompt: str, seed: int | None = None, bars: int = 8) -> PromptIntent:
-    """Lightweight intent extraction from a creative brief (no LLM in Phase 0)."""
-    lower = prompt.lower()
-    genre = "default"
-    for g in ("amapiano", "afrobeats", "afrobeat", "rnb", "r&b", "trap", "drill", "pop"):
-        if g in lower:
-            genre = "afrobeats" if g.startswith("afro") else ("rnb" if g in ("rnb", "r&b") else g)
-            break
-
-    bpm = 110.0
-    bpm_match = re.search(r"(\d{2,3})\s*bpm", lower)
-    if bpm_match:
-        bpm = float(bpm_match.group(1))
-    elif genre == "trap":
-        bpm = 140.0
-    elif genre == "amapiano":
-        bpm = 112.0
-    elif genre == "afrobeats":
-        bpm = 110.0
-    elif genre == "rnb":
-        bpm = 90.0
-
-    key = "A minor"
-    key_match = re.search(
-        r"\b([A-Ga-g](?:#|b)?)\s*(major|minor|maj|min|m)?\b",
-        prompt,
-    )
-    if key_match:
-        root = key_match.group(1).upper() if len(key_match.group(1)) == 1 else (
-            key_match.group(1)[0].upper() + key_match.group(1)[1:]
-        )
-        mode_tok = (key_match.group(2) or "").lower()
-        if mode_tok in ("m", "min", "minor") or "minor" in lower:
-            key = f"{root} minor"
-        elif mode_tok in ("maj", "major"):
-            key = f"{root} major"
-        else:
-            key = f"{root} minor" if "minor" in lower else f"{root} major"
-
-    mood = "mellow" if any(w in lower for w in ("mellow", "chill", "soft", "warm")) else "energetic"
-    if any(w in lower for w in ("dark", "moody", "atmospheric")):
-        mood = "atmospheric"
-
-    return PromptIntent(
-        genre=genre,
-        bpm=bpm,
-        key=key,
-        bars=bars,
-        mood=mood,
-        seed=seed_from_prompt(prompt, seed),
-        brief=prompt.strip(),
-    )
-
-
 def _humanize(rng: Random, base: float, amount: float = 0.02) -> float:
     return max(0.0, base + rng.uniform(-amount, amount))
 
 
-def generate_drums(intent: PromptIntent, rng: Random, bars: int, bpb: int) -> MusicTrack:
+def generate_drums(brief: BriefDocument, rng: Random, bars: int, bpb: int) -> MusicTrack:
+    tmpl = get_template(brief.genre_template_id or "default")
+    genre = tmpl.id
+    density = tmpl.groove_density * (0.7 + 0.6 * brief.novelty)
     events: list[DrumEvent] = []
     total = bars * bpb
     for beat in range(total):
         bar_pos = beat % bpb
-        # Kick on 1 and often 3; Afrobeats/Amapiano add syncopation
-        if bar_pos == 0 or (bar_pos == 2 and intent.genre in ("default", "pop", "rnb", "trap")):
+        bar_idx = beat // bpb
+        energy = 0.55
+        if brief.energy_curve:
+            ep = next((e for e in brief.energy_curve if e.bar == bar_idx + 1), None)
+            if ep:
+                energy = ep.value
+
+        if bar_pos == 0 or (bar_pos == 2 and genre in ("default", "pop", "rnb", "trap", "drill")):
             events.append(
                 DrumEvent(
                     instrument_role="kick",
                     onset_beats=_humanize(rng, float(beat), 0.01),
-                    velocity=rng.randint(100, 120),
+                    velocity=int(90 + 30 * energy),
                     duration_beats=0.25,
                 )
             )
-        if intent.genre in ("afrobeats", "amapiano") and bar_pos in (1, 2) and rng.random() < 0.55:
+        if genre in ("afrobeats", "amapiano") and bar_pos in (1, 2) and rng.random() < 0.45 + 0.2 * density:
             events.append(
                 DrumEvent(
                     instrument_role="kick",
@@ -131,9 +69,8 @@ def generate_drums(intent: PromptIntent, rng: Random, bars: int, bpb: int) -> Mu
                     duration_beats=0.2,
                 )
             )
-        # Snare / clap on 2 and 4
         if bar_pos in (1, 3):
-            role = "clap" if intent.genre in ("afrobeats", "amapiano") else "snare"
+            role = "clap" if genre in ("afrobeats", "amapiano") else "snare"
             events.append(
                 DrumEvent(
                     instrument_role=role,
@@ -142,17 +79,22 @@ def generate_drums(intent: PromptIntent, rng: Random, bars: int, bpb: int) -> Mu
                     duration_beats=0.25,
                 )
             )
-        # Hats every 8th; open hat occasional
-        for sub in (0.0, 0.5):
+        # Hats — denser with novelty / trap
+        subs = [0.0, 0.5]
+        if genre in ("trap", "drill") or brief.novelty > 0.6:
+            subs = [0.0, 0.25, 0.5, 0.75]
+        for sub in subs:
+            if rng.random() > density and sub not in (0.0, 0.5):
+                continue
             events.append(
                 DrumEvent(
                     instrument_role="hat",
                     onset_beats=_humanize(rng, beat + sub, 0.008),
-                    velocity=rng.randint(55, 90) if sub == 0 else rng.randint(40, 70),
-                    duration_beats=0.15,
+                    velocity=rng.randint(40, 90),
+                    duration_beats=0.12,
                 )
             )
-        if intent.genre == "amapiano" and bar_pos == 3 and rng.random() < 0.4:
+        if genre == "amapiano" and bar_pos == 3 and rng.random() < 0.45:
             events.append(
                 DrumEvent(
                     instrument_role="perc",
@@ -161,53 +103,58 @@ def generate_drums(intent: PromptIntent, rng: Random, bars: int, bpb: int) -> Mu
                     duration_beats=0.2,
                 )
             )
-
-    # Also encode as NoteEvents on GM drum channel for MIDI export convenience
-    notes: list[NoteEvent] = []
-    for e in events:
-        pitch = GM_DRUM.get(e.instrument_role, 37)
-        notes.append(
-            NoteEvent(
-                pitch=pitch,
-                onset_beats=e.onset_beats,
-                duration_beats=e.duration_beats or 0.25,
-                velocity=e.velocity,
-                channel=9,
-                source="generator:drums",
+        # End-of-loop fill
+        if bar_idx == bars - 1 and bar_pos == 3 and brief.novelty >= 0.3:
+            events.append(
+                DrumEvent(
+                    instrument_role="hat_open",
+                    onset_beats=_humanize(rng, beat + 0.5, 0.01),
+                    velocity=rng.randint(80, 110),
+                    duration_beats=0.4,
+                )
             )
-        )
 
+    notes = [
+        NoteEvent(
+            pitch=GM_DRUM.get(e.instrument_role, 37),
+            onset_beats=e.onset_beats,
+            duration_beats=e.duration_beats or 0.25,
+            velocity=min(127, e.velocity),
+            channel=9,
+            source="generator:drums",
+        )
+        for e in events
+    ]
     return MusicTrack(
         role=TrackRole.DRUMS,
         drum_events=events,
         note_events=notes,
-        tags=[intent.genre, "drums", "phase0"],
+        tags=[genre, "drums", "phase1"],
     )
 
 
-def generate_bass(intent: PromptIntent, rng: Random, bars: int, bpb: int) -> MusicTrack:
-    root_pc, mode = parse_key(intent.key)
-    prog = PROGRESSIONS.get(intent.genre, PROGRESSIONS["default"])
+def generate_bass(brief: BriefDocument, rng: Random, bars: int, bpb: int) -> MusicTrack:
+    tmpl = get_template(brief.genre_template_id or "default")
+    root_pc, mode = parse_key(brief.key or "A minor")
+    prog = PROGRESSIONS.get(tmpl.progression_key, PROGRESSIONS["default"])
     notes: list[NoteEvent] = []
     for bar in range(bars):
         degree = prog[bar % len(prog)]
         root = scale_pitch(root_pc, degree, octave=2, mode=mode)
         onset = float(bar * bpb)
-        # Root on downbeat
         notes.append(
             NoteEvent(
                 pitch=root,
                 onset_beats=onset,
-                duration_beats=1.5 if intent.mood == "mellow" else 1.0,
+                duration_beats=1.5 if brief.novelty < 0.5 else 1.0,
                 velocity=rng.randint(90, 110),
                 channel=1,
                 source="generator:bass",
             )
         )
-        # Syncopated answer
         answer_deg = degree + (2 if rng.random() < 0.5 else 4)
         answer = scale_pitch(root_pc, answer_deg, octave=2, mode=mode)
-        off = 2.0 if intent.genre not in ("afrobeats", "amapiano") else 1.5
+        off = 2.0 if tmpl.id not in ("afrobeats", "amapiano") else 1.5
         notes.append(
             NoteEvent(
                 pitch=answer,
@@ -218,7 +165,7 @@ def generate_bass(intent: PromptIntent, rng: Random, bars: int, bpb: int) -> Mus
                 source="generator:bass",
             )
         )
-        if intent.genre in ("afrobeats", "amapiano"):
+        if tmpl.id in ("afrobeats", "amapiano") or brief.novelty > 0.55:
             notes.append(
                 NoteEvent(
                     pitch=root,
@@ -229,25 +176,41 @@ def generate_bass(intent: PromptIntent, rng: Random, bars: int, bpb: int) -> Mus
                     source="generator:bass",
                 )
             )
-    return MusicTrack(role=TrackRole.BASS, note_events=notes, tags=[intent.genre, "bass", "phase0"])
+        if tmpl.id in ("trap", "drill"):
+            # Longer 808 sustain on downbeat already; add ghost octave
+            notes.append(
+                NoteEvent(
+                    pitch=min(127, root + 12),
+                    onset_beats=onset + 0.05,
+                    duration_beats=0.1,
+                    velocity=rng.randint(40, 60),
+                    channel=1,
+                    source="generator:bass",
+                )
+            )
+    return MusicTrack(role=TrackRole.BASS, note_events=notes, tags=[tmpl.id, "bass", "phase1"])
 
 
-def generate_chords(intent: PromptIntent, rng: Random, bars: int, bpb: int) -> MusicTrack:
-    root_pc, mode = parse_key(intent.key)
-    prog = PROGRESSIONS.get(intent.genre, PROGRESSIONS["default"])
+def generate_chords(brief: BriefDocument, rng: Random, bars: int, bpb: int) -> MusicTrack:
+    tmpl = get_template(brief.genre_template_id or "default")
+    root_pc, mode = parse_key(brief.key or "A minor")
+    prog = PROGRESSIONS.get(tmpl.progression_key, PROGRESSIONS["default"])
     notes: list[NoteEvent] = []
+    soft = brief.novelty < 0.45 or any(c.trait == "chord_feel" for c in brief.borrow_chips)
     for bar in range(bars):
         degree = prog[bar % len(prog)]
         pitches = triad(root_pc, degree, octave=4, mode=mode)
+        # Optional 7th for higher novelty
+        if brief.novelty > 0.55 and rng.random() < 0.5:
+            pitches.append(scale_pitch(root_pc, degree + 6, octave=4, mode=mode))
         onset = float(bar * bpb)
-        # Rhodes-like sustained pads with slight stagger
         for i, pitch in enumerate(pitches):
             notes.append(
                 NoteEvent(
                     pitch=pitch,
                     onset_beats=onset + i * 0.02,
                     duration_beats=float(bpb) - 0.1,
-                    velocity=rng.randint(55, 80) if intent.mood in ("mellow", "atmospheric") else rng.randint(70, 95),
+                    velocity=rng.randint(50, 75) if soft else rng.randint(70, 95),
                     channel=2,
                     articulation="sustain",
                     source="generator:chords",
@@ -256,25 +219,19 @@ def generate_chords(intent: PromptIntent, rng: Random, bars: int, bpb: int) -> M
     return MusicTrack(
         role=TrackRole.CHORD,
         note_events=notes,
-        tags=[intent.genre, "chords", "keys", "phase0"],
+        tags=[tmpl.id, "chords", "keys", "phase1"],
     )
 
 
-def generate_eight_bar_project(
-    prompt: str,
-    *,
-    seed: int | None = None,
-    bars: int = 8,
-    name: str | None = None,
-) -> MusicProject:
-    """Build a reproducible MusicProject with drums, bass, and chords."""
-    intent = parse_prompt(prompt, seed=seed, bars=bars)
-    rng = Random(intent.seed)
-    bpb = beats_per_bar("4/4")
+def generate_from_brief(brief: BriefDocument, *, name: str | None = None) -> MusicProject:
+    bars = brief.length_bars
+    seed = brief.seed if brief.seed is not None else 0
+    rng = Random(seed)
+    bpb = beats_per_bar(brief.meter)
 
-    drums = generate_drums(intent, rng, bars, bpb)
-    bass = generate_bass(intent, Random(intent.seed + 1), bars, bpb)
-    chords = generate_chords(intent, Random(intent.seed + 2), bars, bpb)
+    drums = generate_drums(brief, rng, bars, bpb)
+    bass = generate_bass(brief, Random(seed + 1), bars, bpb)
+    chords = generate_chords(brief, Random(seed + 2), bars, bpb)
     tracks = [drums, bass, chords]
     section = Section(
         name="loop_a",
@@ -283,24 +240,69 @@ def generate_eight_bar_project(
         intensity_target=0.6,
         active_track_ids=[t.id for t in tracks],
     )
-
+    tmpl = get_template(brief.genre_template_id or "default")
     project = MusicProject(
         id=new_id(),
-        name=name or f"{intent.genre}-{intent.bpm:g}bpm-{bars}bars",
-        bpm=intent.bpm,
-        meter="4/4",
-        key_estimate=intent.key,
+        name=name or f"{tmpl.id}-{brief.bpm:g}bpm-{bars}bars",
+        bpm=float(brief.bpm or tmpl.default_bpm),
+        meter=brief.meter,
+        key_estimate=brief.key,
         key_confidence=0.55,
-        tonal_mode=parse_key(intent.key)[1],
+        tonal_mode=parse_key(brief.key or "A minor")[1],
         length_bars=bars,
         tracks=tracks,
         track_ids=[t.id for t in tracks],
         sections=[section],
         section_ids=[section.id],
-        generation_brief=intent.brief,
+        generation_brief=brief.free_text,
+        brief_id=brief.id,
         status=ProjectStatus.COMPOSING,
-        seed=intent.seed,
+        seed=seed,
+        autonomy_policy=AutonomyPolicy(
+            mode=brief.autonomy_mode,
+            scratch_or_release=brief.scratch_or_release,
+        ),
         created_at=utcnow(),
         updated_at=utcnow(),
     )
+    if brief.locked_roles:
+        project = apply_role_locks(project, brief.locked_roles)
     return project
+
+
+def generate_eight_bar_project(
+    prompt: str,
+    *,
+    seed: int | None = None,
+    bars: int = 8,
+    name: str | None = None,
+    locked_roles: list[str] | None = None,
+) -> MusicProject:
+    brief = parse_brief(prompt, seed=seed, bars=bars, locked_roles=locked_roles)
+    return generate_from_brief(brief, name=name)
+
+
+# Back-compat for Phase 0 tests
+def parse_prompt(prompt: str, seed: int | None = None, bars: int = 8):
+    from backend.app.music.generators import _PromptIntentCompat
+
+    brief = parse_brief(prompt, seed=seed, bars=bars)
+    return _PromptIntentCompat(
+        genre=brief.genre_template_id or "default",
+        bpm=float(brief.bpm or 110),
+        key=brief.key or "A minor",
+        bars=brief.length_bars,
+        mood="mellow" if brief.novelty < 0.4 else "energetic",
+        seed=brief.seed or 0,
+        brief=brief.free_text,
+    )
+
+
+class _PromptIntentCompat:
+    def __init__(self, **kwargs):
+        for k, v in kwargs.items():
+            setattr(self, k, v)
+
+
+def seed_from_prompt(prompt: str, explicit_seed: int | None = None) -> int:
+    return parse_brief(prompt, seed=explicit_seed).seed or 0

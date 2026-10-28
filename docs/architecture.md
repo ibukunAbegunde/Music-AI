@@ -1,10 +1,10 @@
 # Architecture — Private AI Music Producer
 
-Version: 0.1.0 (Phase 0) | Spec: `docs/ai-music-producer-build-spec.md` (Agent Store)
+Version: 0.2.0 (Phase 1) | Spec: build spec **v1.1** + `product-upgrades-v1.1.md` (Agent Store)
 
 ## Purpose
 
-Local-first, reference-aware music production assistant for a single user on Apple Silicon + FL Studio. Creative intent and references become a **canonical intermediate representation (CIR)** (`MusicProject`), then adapters apply or export that state. Phase 0 delivers the skeleton, typed contracts, SQLite + workspace store, deterministic 8-bar MIDI generation, `FakeDawAdapter`, and `MidiExportAdapter` — without live FL Studio or large models.
+Local-first, reference-aware music production assistant for a single user on Apple Silicon + FL Studio. Creative intent flows through a **BriefDocument** (constraint-first canvas) into a **canonical intermediate representation (CIR)** (`MusicProject`), then adapters apply or export that state. Phase 0 delivered skeleton + FakeDaw + MIDI export. Phase 1 adds brief parser, genre templates, role-locks, musical diff, candidate packaging, revise/undo — still without live FL Studio or large models. Neural audio dual-path is allowed by v1.1; CIR remains system of record.
 
 ## High-level diagram
 
@@ -31,10 +31,11 @@ Local-first, reference-aware music production assistant for a single user on App
 | `llm` | Tool-using providers | Stub / unused |
 | `audio` | Ingest, stems, features | Not started |
 | `transcription` | Audio → MIDI | Not started |
-| `music` | Theory, groove, generators, MIDI | **Baseline generators + MIDI I/O** |
-| `generation` | Symbolic / neural | Deterministic templates only |
-| `taste` | Preference / ranking | Not started |
-| `daw` | DAW adapters | **Fake + MIDI export** |
+| `music` | Theory, groove, generators, MIDI, brief, diff, coedit | **Phase 1 generators + brief + diff + locks** |
+| `generation` | Symbolic / neural | Deterministic templates + genre pack |
+| `taste` | Preference / ranking | Schema stubs only |
+| `daw` | DAW adapters | **Fake + MIDI export** (+ verify/undo) |
+| `agents` | Critic / planner | **PatchOp stub next-moves** |
 | `render_eval` | Bounce analysis | Not started |
 | `assets` | Sample/VST manifest | Workspace paths only |
 | `storage` | SQLite, versions, blobs | **Projects + versions** |

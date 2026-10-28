@@ -1,10 +1,11 @@
-"""CLI entrypoint: music-ai compose / doctor / probe."""
+"""CLI entrypoint: music-ai compose / revise / brief / doctor / probe."""
 
 from __future__ import annotations
 
 import json
 from pathlib import Path
 from typing import Optional
+from uuid import UUID
 
 import typer
 from rich.console import Console
@@ -14,53 +15,87 @@ from backend.app.core.config import DawMode, Settings, get_settings
 from backend.app.core.logging import setup_logging
 from backend.app.daw.fake import FakeDawAdapter
 from backend.app.daw.midi_fallback import MidiExportAdapter
+from backend.app.music.brief import parse_brief
+from backend.app.music.templates import list_templates
 from backend.app.services.compose import compose_from_prompt
+from backend.app.services.revise import revise_project
+from backend.app.storage.assets import AssetStore
 
-app = typer.Typer(help="Private AI Music Producer — Phase 0 CLI", no_args_is_help=True)
+app = typer.Typer(
+    help="Private AI Music Producer — Phase 1 CLI (brief canvas + MIDI)",
+    no_args_is_help=True,
+)
 console = Console()
+
+
+def _settings(mode: str | None, workspace: Path | None) -> Settings:
+    base = get_settings()
+    if workspace is not None:
+        return Settings(
+            workspace_dir=workspace,
+            database_url=f"sqlite:///{workspace / 'music_ai.db'}",
+            daw_mode=DawMode(mode) if mode else base.daw_mode,
+            log_level=base.log_level,
+        )
+    if mode is not None:
+        return Settings(
+            workspace_dir=base.workspace_dir,
+            database_url=base.database_url,
+            daw_mode=DawMode(mode),
+            log_level=base.log_level,
+        )
+    return base
+
+
+def _adapter(settings: Settings):
+    if settings.daw_mode == DawMode.MIDI_EXPORT:
+        return MidiExportAdapter(AssetStore(settings))
+    return FakeDawAdapter()
+
+
+def _print_moves(moves) -> None:
+    if not moves:
+        return
+    console.print("[bold]Next moves (typed PatchOps):[/]")
+    for i, op in enumerate(moves, 1):
+        console.print(
+            f"  {i}. {op.action_type} → {op.target_role} — {op.predicted_impact or op.explanation}"
+        )
 
 
 @app.command()
 def compose(
-    prompt: str = typer.Argument(..., help="Creative brief, e.g. 'mellow Afrobeats 110 BPM in A minor'"),
-    seed: Optional[int] = typer.Option(None, help="Explicit RNG seed for reproducibility"),
+    prompt: str = typer.Argument(..., help="Creative brief / NL request"),
+    seed: Optional[int] = typer.Option(None, help="Explicit RNG seed"),
     bars: int = typer.Option(8, help="Loop length in bars"),
     mode: Optional[str] = typer.Option(None, help="simulation | midi_export"),
     workspace: Optional[Path] = typer.Option(None, help="Override workspace directory"),
+    lock: Optional[list[str]] = typer.Option(None, help="Roles to lock (repeatable)"),
 ) -> None:
-    """Generate an 8-bar drum/bass/chord MIDI project from a prompt."""
-    settings = get_settings()
-    if workspace is not None:
-        settings = Settings(
-            workspace_dir=workspace,
-            database_url=f"sqlite:///{workspace / 'music_ai.db'}",
-            daw_mode=DawMode(mode) if mode else settings.daw_mode,
-            log_level=settings.log_level,
-        )
-    elif mode is not None:
-        settings = Settings(
-            workspace_dir=settings.workspace_dir,
-            database_url=settings.database_url,
-            daw_mode=DawMode(mode),
-            log_level=settings.log_level,
-        )
+    """NL/brief → 8-bar drum/bass/chord MIDI + candidate package."""
+    settings = _settings(mode, workspace)
     setup_logging(settings.log_level)
-
-    adapter = None
-    if settings.daw_mode == DawMode.MIDI_EXPORT:
-        from backend.app.storage.assets import AssetStore
-
-        adapter = MidiExportAdapter(AssetStore(settings))
-    else:
-        adapter = FakeDawAdapter()
-
-    result = compose_from_prompt(prompt, seed=seed, bars=bars, settings=settings, adapter=adapter)
-
+    result = compose_from_prompt(
+        prompt,
+        seed=seed,
+        bars=bars,
+        settings=settings,
+        adapter=_adapter(settings),
+        locked_roles=list(lock or []),
+    )
     console.print(f"[bold green]Project[/] {result.project.id}")
-    console.print(f"  name: {result.project.name}")
-    console.print(f"  seed: {result.project.seed}  bpm: {result.project.bpm}  key: {result.project.key_estimate}")
-    console.print(f"  genre intent: {result.intent.get('genre')}  mood: {result.intent.get('mood')}")
-    console.print(f"  metadata: {result.metadata_path}")
+    console.print(f"  brief: {result.brief.title} ({result.brief.genre_template_id})")
+    console.print(
+        f"  seed: {result.project.seed}  bpm: {result.project.bpm}  key: {result.project.key_estimate}"
+    )
+    console.print(f"  locks: {result.brief.locked_roles or '—'}")
+    console.print(f"  candidate: {result.candidate.id}")
+    console.print(f"  one-line diff: {result.candidate.one_line_diff}")
+    console.print(f"  CIR: {result.candidate.cir_snapshot_ref}")
+    console.print(
+        f"  loudness: {result.candidate.loudness_notes.normalization_status} "
+        f"(target {result.candidate.loudness_notes.target_lufs} LUFS)"
+    )
 
     table = Table(title="Exported MIDI")
     table.add_column("Role")
@@ -71,15 +106,77 @@ def compose(
             (len(t.note_events) for t in result.project.tracks if t.role.value == role),
             "—",
         )
-        table.add_row(role, str(path), str(note_count))
+        locked = next(
+            (t.locked for t in result.project.tracks if t.role.value == role),
+            False,
+        )
+        label = f"{role}{' 🔒' if locked else ''}"
+        table.add_row(label, str(path), str(note_count))
     console.print(table)
-
-    daw = result.daw_result
     console.print(
-        f"DAW [{settings.daw_mode.value}]: succeeded={daw.succeeded} verified={daw.verified}"
+        f"DAW [{settings.daw_mode.value}]: succeeded={result.daw_result.succeeded} "
+        f"verified={result.daw_result.verified}"
     )
-    if daw.user_action_required:
-        console.print(f"[yellow]User action:[/] {daw.user_action_required}")
+    if result.daw_result.user_action_required:
+        console.print(f"[yellow]User action:[/] {result.daw_result.user_action_required}")
+    _print_moves(result.next_moves)
+
+
+@app.command()
+def brief(
+    prompt: str = typer.Argument(..., help="Text to parse into BriefDocument JSON"),
+    seed: Optional[int] = typer.Option(None),
+    bars: int = typer.Option(8),
+) -> None:
+    """Parse NL into a constraint-first brief canvas document (no generation)."""
+    doc = parse_brief(prompt, seed=seed, bars=bars)
+    console.print_json(doc.model_dump_json(indent=2))
+
+
+@app.command()
+def revise(
+    project_id: str = typer.Argument(..., help="Existing project UUID"),
+    instruction: str = typer.Argument(
+        ...,
+        help="e.g. 'keep the drums, soften bass and add a fill before bar 8'",
+    ),
+    seed: Optional[int] = typer.Option(None),
+    mode: Optional[str] = typer.Option(None, help="simulation | midi_export"),
+    workspace: Optional[Path] = typer.Option(None),
+) -> None:
+    """Revise a project honoring role-locks; print musical diff + next moves."""
+    settings = _settings(mode, workspace)
+    setup_logging(settings.log_level)
+    adapter = _adapter(settings)
+    result = revise_project(
+        UUID(project_id),
+        instruction,
+        seed=seed,
+        settings=settings,
+        adapter=adapter,
+    )
+    console.print(f"[bold green]Revised[/] {result.project.id} → version {result.version.id}")
+    console.print(f"  musical diff: {result.diff.one_line_summary}")
+    console.print(f"  locks respected: {result.diff.locked_roles_respected}")
+    console.print(f"  roles changed: {result.diff.roles_changed}")
+    if result.diff.details:
+        for d in result.diff.details:
+            console.print(f"    - {d}")
+    console.print(f"  undo snapshot: {result.snapshot_ref or 'n/a (midi_export)'}")
+    _print_moves(result.next_moves)
+
+
+@app.command("templates")
+def templates_cmd() -> None:
+    """List genre structure templates."""
+    table = Table(title="Genre templates")
+    table.add_column("ID")
+    table.add_column("BPM")
+    table.add_column("Density")
+    table.add_column("Notes")
+    for t in list_templates():
+        table.add_row(t.id, f"{t.default_bpm:g}", f"{t.groove_density:.2f}", t.notes or "")
+    console.print(table)
 
 
 @app.command()
@@ -87,53 +184,43 @@ def doctor() -> None:
     """Inspect local environment (safe checks only)."""
     from backend.app.core.doctor import run_doctor
 
-    report = run_doctor()
-    console.print_json(json.dumps(report, indent=2, default=str))
+    console.print_json(json.dumps(run_doctor(), indent=2, default=str))
 
 
 @app.command("probe-daw")
 def probe_daw() -> None:
-    """Probe DAW bridge availability (simulation / midi_export / postfader if present)."""
-    settings = get_settings()
-    setup_logging(settings.log_level)
-    report: dict = {
-        "configured_mode": settings.daw_mode.value,
-        "platform": __import__("platform").platform(),
-        "fl_studio_path_env": settings.fl_studio_path,
-        "postfader_path_env": settings.postfader_path,
-        "live_bridge": False,
-        "adapters": {},
-    }
-
-    fake = FakeDawAdapter()
-    fake.connect()
-    report["adapters"]["fake"] = fake.probe_capabilities().as_dict()
-
-    midi = MidiExportAdapter()
-    midi.connect()
-    report["adapters"]["midi_export"] = midi.probe_capabilities().as_dict()
-
-    # Safe probe: do not install anything; just look for common markers
+    """Probe DAW bridge availability."""
     import platform
     import shutil
     from pathlib import Path as P
 
+    settings = get_settings()
+    setup_logging(settings.log_level)
+    report: dict = {
+        "configured_mode": settings.daw_mode.value,
+        "platform": platform.platform(),
+        "live_bridge": False,
+        "adapters": {},
+    }
+    fake = FakeDawAdapter()
+    fake.connect()
+    report["adapters"]["fake"] = fake.probe_capabilities().as_dict()
+    midi = MidiExportAdapter()
+    midi.connect()
+    report["adapters"]["midi_export"] = midi.probe_capabilities().as_dict()
     markers = []
     if platform.system() == "Darwin":
-        candidates = [
+        for c in (
             P("/Applications/FL Studio 2024.app"),
             P("/Applications/FL Studio 2025.app"),
             P("/Applications/FL Studio.app"),
-        ]
-        for c in candidates:
+        ):
             if c.exists():
                 markers.append(str(c))
-        if shutil.which("python3"):
-            markers.append("python3_present")
     report["macos_markers"] = markers
     report["note"] = (
         "Cloud/Linux CI: FL Studio, PostFader, and IAC MIDI are N/A. "
-        "Use simulation or midi_export mode. Live probe belongs on the user's Apple Silicon Mac."
+        "Use simulation or midi_export mode."
     )
     console.print_json(json.dumps(report, indent=2, default=str))
 
