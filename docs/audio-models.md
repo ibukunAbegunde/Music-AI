@@ -81,7 +81,7 @@ TASTE_ENCODER=simulation
 MUSIC_AI_ALLOW_ENCODER_DOWNLOAD=false
 ```
 
-Do not flip the download flag in CI. Ranking-head training works on the simulation encoder; swap the encoder later without changing the head interface.
+Settings field: `music_ai_allow_encoder_download` (reads `MUSIC_AI_ALLOW_ENCODER_DOWNLOAD`; also accepts bare `ALLOW_ENCODER_DOWNLOAD`). Do not flip the download flag in CI. Ranking-head training works on the simulation encoder; swap the encoder later without changing the head interface.
 
 ## Rights reminder
 

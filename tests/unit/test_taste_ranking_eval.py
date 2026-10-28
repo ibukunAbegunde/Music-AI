@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from backend.app.core.config import Settings
 from backend.app.taste.evaluation import evaluate_ranking, project_holdout_split
@@ -111,9 +112,37 @@ def test_registry_activate_and_rollback(tmp_settings: Settings) -> None:
     assert rolled.id == ckpt1.id
     assert get_active_checkpoint(settings=tmp_settings).id == ckpt1.id
 
-    # re-activate v2 explicitly
+    # re-activate v2 explicitly (still better_than_baseline)
     activate_checkpoint(ckpt2.id, settings=tmp_settings)
     assert get_active_checkpoint(settings=tmp_settings).id == ckpt2.id
+
+
+def test_activate_refuses_unless_better_or_force(tmp_settings: Settings) -> None:
+    tmp_settings.ensure_workspace()
+    pairs = build_simulated_dataset(
+        n_projects=3, pairs_per_project=2, settings=tmp_settings, persist=True, seed=9
+    )
+    emb_a = np.stack([p.emb_a for p in pairs])
+    emb_b = np.stack([p.emb_b for p in pairs])
+    labels = np.asarray([p.label for p in pairs])
+    tr = train_ranking_head(emb_a, emb_b, labels, epochs=50, seed=0)
+
+    weak = tr.head.to_checkpoint(
+        version="0.0.1-weak",
+        train_metrics=tr.train_metrics,
+        holdout_metrics={"accuracy": 0.4},
+        better_than_baseline=False,
+    )
+    save_checkpoint(weak, settings=tmp_settings, activate_if_better=True)
+    assert get_active_checkpoint(settings=tmp_settings) is None
+
+    with pytest.raises(ValueError, match="better_than_baseline"):
+        activate_checkpoint(weak.id, settings=tmp_settings)
+
+    forced = activate_checkpoint(weak.id, settings=tmp_settings, force=True)
+    assert forced.active
+    assert get_active_checkpoint(settings=tmp_settings).id == weak.id
+    assert forced.notes and "force_activated=true" in forced.notes
 
 
 def test_retrieval_baseline_predicts() -> None:

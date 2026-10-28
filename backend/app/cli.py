@@ -930,6 +930,31 @@ def taste_registry(workspace: Path | None = typer.Option(None)) -> None:
     console.print(table)
 
 
+@app.command("taste-activate")
+def taste_activate(
+    checkpoint_id: str = typer.Argument(..., help="Checkpoint UUID to activate"),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help="Bypass better-than-retrieval gate (logged on checkpoint notes)",
+    ),
+    workspace: Path | None = typer.Option(None),
+) -> None:
+    """Activate a taste checkpoint (refuses unless better_than_baseline, unless --force)."""
+    from uuid import UUID
+
+    from backend.app.taste.registry import activate_checkpoint
+
+    settings = _settings(None, workspace)
+    try:
+        ckpt = activate_checkpoint(UUID(checkpoint_id), settings=settings, force=force)
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/]")
+        raise typer.Exit(code=1) from exc
+    suffix = " (forced)" if force and not ckpt.better_than_baseline else ""
+    console.print(f"[bold green]Activated[/] → {ckpt.id} v={ckpt.version}{suffix}")
+
+
 @app.command("taste-rollback")
 def taste_rollback(workspace: Path | None = typer.Option(None)) -> None:
     """Roll back to the previously active taste checkpoint."""

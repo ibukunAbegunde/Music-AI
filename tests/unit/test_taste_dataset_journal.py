@@ -6,7 +6,6 @@ from uuid import uuid4
 
 from backend.app.core.config import Settings
 from backend.app.models.schemas import ListeningJournalEntry, new_id
-from backend.app.music.brief import parse_brief
 from backend.app.music.recipes import recipe_from_project, save_recipe
 from backend.app.services.compose import compose_from_prompt
 from backend.app.daw.fake import FakeDawAdapter

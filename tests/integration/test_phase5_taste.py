@@ -89,6 +89,8 @@ def test_full_taste_pipeline_simulate_train_eval_registry(tmp_settings: Settings
 
 
 def test_registry_rollback_after_second_train(tmp_settings: Settings) -> None:
+    from backend.app.taste.registry import activate_checkpoint
+
     tmp_settings.ensure_workspace()
     build_simulated_dataset(
         n_projects=8, pairs_per_project=4, settings=tmp_settings, seed=5, persist=True
@@ -99,17 +101,16 @@ def test_registry_rollback_after_second_train(tmp_settings: Settings) -> None:
     r2 = train_and_evaluate(
         settings=tmp_settings, version="0.2.0", seed=1, epochs=250, activate_if_better=True
     )
-    # Force-activate both path: if either activated, exercise rollback history
-    if r1.activated and r2.activated:
-        active = get_active_checkpoint(settings=tmp_settings)
-        assert active is not None
-        assert active.version == "0.2.0"
-        prev = rollback_checkpoint(settings=tmp_settings)
-        assert prev is not None
-        assert prev.version == "0.1.0"
-    else:
-        # Still have registered checkpoints even if gate refused activation
-        assert len(list_checkpoints(settings=tmp_settings)) >= 2
+    assert len(list_checkpoints(settings=tmp_settings)) >= 2
+    # Ensure both are in the activation history even if the retrieval gate refused.
+    activate_checkpoint(r1.checkpoint.id, settings=tmp_settings, force=True)
+    activate_checkpoint(r2.checkpoint.id, settings=tmp_settings, force=True)
+    active = get_active_checkpoint(settings=tmp_settings)
+    assert active is not None
+    assert active.version == "0.2.0"
+    prev = rollback_checkpoint(settings=tmp_settings)
+    assert prev is not None
+    assert prev.version == "0.1.0"
 
 
 def test_style_vectors_from_approved_recipe(tmp_settings: Settings) -> None:

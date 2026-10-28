@@ -98,7 +98,10 @@ def get_frozen_encoder(
     If prefer_optional and allow flag is set but no model installed → clear error.
     """
     settings = settings or get_settings()
-    allow = bool(getattr(settings, "allow_encoder_download", False))
+    allow = bool(
+        getattr(settings, "music_ai_allow_encoder_download", False)
+        or getattr(settings, "allow_encoder_download", False)
+    )
     if prefer_optional or getattr(settings, "taste_encoder", "simulation") == "optional":
         if not allow:
             raise RuntimeError(

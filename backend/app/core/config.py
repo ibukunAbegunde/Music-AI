@@ -6,7 +6,7 @@ from enum import Enum
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -40,7 +40,21 @@ class Settings(BaseSettings):
     prefer_librosa: bool = False
     # Phase 5 taste — simulation encoder by default; optional requires explicit flag
     taste_encoder: str = "simulation"  # simulation | optional
-    allow_encoder_download: bool = False
+    # Prefer MUSIC_AI_ALLOW_ENCODER_DOWNLOAD; bare ALLOW_ENCODER_DOWNLOAD also accepted.
+    music_ai_allow_encoder_download: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "MUSIC_AI_ALLOW_ENCODER_DOWNLOAD",
+            "ALLOW_ENCODER_DOWNLOAD",
+            "music_ai_allow_encoder_download",
+            "allow_encoder_download",
+        ),
+    )
+
+    @property
+    def allow_encoder_download(self) -> bool:
+        """Compat alias for music_ai_allow_encoder_download."""
+        return self.music_ai_allow_encoder_download
 
     def ensure_workspace(self) -> Path:
         """Create workspace subdirectories used by Phase 0–5."""

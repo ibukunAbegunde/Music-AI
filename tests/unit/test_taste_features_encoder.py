@@ -69,10 +69,22 @@ def test_optional_encoder_refuses_without_flag(tmp_settings: Settings) -> None:
     stub = OptionalAudioEncoderStub()
     with pytest.raises(RuntimeError, match="not installed"):
         stub.encode_project(_mini_project())
-    tmp_settings.allow_encoder_download = False
+    tmp_settings.music_ai_allow_encoder_download = False
     tmp_settings.taste_encoder = "optional"
     with pytest.raises(RuntimeError, match="MUSIC_AI_ALLOW_ENCODER_DOWNLOAD"):
         get_frozen_encoder(tmp_settings, prefer_optional=True)
+
+
+def test_music_ai_allow_encoder_download_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Documented MUSIC_AI_* env name must flip the setting (not only bare ALLOW_*)."""
+    monkeypatch.delenv("ALLOW_ENCODER_DOWNLOAD", raising=False)
+    monkeypatch.setenv("MUSIC_AI_ALLOW_ENCODER_DOWNLOAD", "true")
+    s = Settings(_env_file=None)
+    assert s.music_ai_allow_encoder_download is True
+    assert s.allow_encoder_download is True
+    monkeypatch.setenv("MUSIC_AI_ALLOW_ENCODER_DOWNLOAD", "false")
+    s2 = Settings(_env_file=None)
+    assert s2.music_ai_allow_encoder_download is False
 
 
 def test_default_encoder_is_simulation(tmp_settings: Settings) -> None:

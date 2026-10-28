@@ -106,13 +106,29 @@ def activate_checkpoint(
     checkpoint_id: UUID,
     *,
     settings: Settings | None = None,
+    force: bool = False,
 ) -> TasteModelCheckpoint:
+    """Activate a registered checkpoint.
+
+    Refuses unless ``better_than_baseline`` (deploy gate) unless ``force=True``.
+    Forced activations are logged via a ``force_activated`` note on the checkpoint.
+    """
     settings = settings or get_settings()
     assets = AssetStore(settings)
     path = _registry_dir(assets) / f"{checkpoint_id}.json"
     if not path.exists():
         raise FileNotFoundError(f"unknown checkpoint {checkpoint_id}")
     ckpt = TasteModelCheckpoint.model_validate(json.loads(path.read_text(encoding="utf-8")))
+    if not ckpt.better_than_baseline and not force:
+        raise ValueError(
+            f"refusing to activate checkpoint {checkpoint_id}: "
+            "better_than_baseline=False (pass force=True to override the deploy gate)"
+        )
+    if force and not ckpt.better_than_baseline:
+        marker = "force_activated=true (bypassed better-than-retrieval gate)"
+        existing = (ckpt.notes or "").strip()
+        if marker not in existing:
+            ckpt.notes = f"{existing}; {marker}".strip("; ") if existing else marker
     index = _load_index(assets)
     _set_active(assets, index, ckpt)
     _save_index(assets, index)

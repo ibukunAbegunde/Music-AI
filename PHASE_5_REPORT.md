@@ -14,9 +14,9 @@ Mode: **simulation** (CIR feature projection as frozen encoder; synthetic pairwi
 | Frozen-encoder ranking head | ✅ | `SimulationFrozenEncoder` + logistic pairwise head (`P(B>A)=sigmoid(sB−sA)`) |
 | Style vectors from approved recipes | ✅ | `taste/style_vectors.py` — only when approved CIR exists |
 | Held-out evaluation (by project) | ✅ | `taste/evaluation.py` project holdout + calibration bins |
-| Model registry / rollback | ✅ | `taste/registry.py`; activate only if better than retrieval |
-| Honest calibration / deploy gate | ✅ | `train_and_evaluate` refuses activation if holdout ≤ retrieval |
-| No large model downloads | ✅ | optional encoder refuses without `MUSIC_AI_ALLOW_ENCODER_DOWNLOAD` |
+| Model registry / rollback | ✅ | `taste/registry.py`; activate only if better than retrieval (`activate_checkpoint` enforces gate; `--force` logged) |
+| Honest calibration / deploy gate | ✅ | `train_and_evaluate` refuses activation if holdout ≤ retrieval; CLI/API activate also gated |
+| No large model downloads | ✅ | optional encoder refuses without `MUSIC_AI_ALLOW_ENCODER_DOWNLOAD` (Settings field honors that env name) |
 | Tests + status docs | ✅ | unit + integration; this report; `IMPLEMENTATION_STATUS.md` |
 
 ## What is real vs stub
