@@ -30,6 +30,10 @@ from backend.app.music.patch_apply import apply_patch_ops
 from backend.app.render_eval.evaluate import evaluate_project, persist_evaluation
 from backend.app.render_eval.metrics import Scoreboard, improved
 from backend.app.render_eval.simulate import seed_cir_defects_from_fixture
+from backend.app.research.action_effect import (
+    append_revision_outcome,
+    outcomes_from_revision_iterations,
+)
 from backend.app.services.compose import select_adapter
 from backend.app.services.revise import _load_cir
 from backend.app.storage.assets import AssetStore
@@ -515,6 +519,32 @@ def run_revision_loop(
         }
         assets.write_json(f"projects/{current.id}/revision_loop_last.json", meta["revision_loop"])
 
+    # Phase 7: persist revision outcomes for action-effect scaffolding.
+    outcome_paths: list[str] = []
+    for row in outcomes_from_revision_iterations(
+        project_id=current.id,
+        version_id=version.id if version else current.version_id,
+        iterations=iterations,
+        fixture_id=fixture_id,
+    ):
+        path = append_revision_outcome(row, settings=settings)
+        outcome_paths.append(str(path))
+    if isinstance(meta, dict):
+        loop_meta = meta.setdefault("revision_loop", {})
+        if isinstance(loop_meta, dict):
+            loop_meta["action_effect_outcomes"] = outcome_paths
+            # Refresh on-disk loop record so outcomes are discoverable from the project.
+            if version is not None:
+                assets.write_json(
+                    f"projects/{current.id}/revision_loop_{version.id}.json",
+                    loop_meta,
+                )
+            else:
+                assets.write_json(
+                    f"projects/{current.id}/revision_loop_last.json",
+                    loop_meta,
+                )
+
     log_event(
         logger,
         "revision_loop.done",
@@ -522,6 +552,7 @@ def run_revision_loop(
         stopped=stopped,
         accepted=sum(1 for it in iterations if it.accepted),
         undo_verified=undo_verified,
+        action_effect_outcomes=len(outcome_paths),
     )
 
     return RevisionLoopResult(

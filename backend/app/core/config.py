@@ -50,6 +50,25 @@ class Settings(BaseSettings):
             "allow_encoder_download",
         ),
     )
+    # Phase 7 research — defaults stay deterministic / stub (no large downloads)
+    midi_specialist: str = "deterministic"  # deterministic | optional
+    vocal_workflow: str = "stub"  # stub | optional
+    music_ai_allow_specialist_download: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "MUSIC_AI_ALLOW_SPECIALIST_DOWNLOAD",
+            "ALLOW_SPECIALIST_DOWNLOAD",
+            "music_ai_allow_specialist_download",
+        ),
+    )
+    music_ai_allow_vocal_model_download: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "MUSIC_AI_ALLOW_VOCAL_MODEL_DOWNLOAD",
+            "ALLOW_VOCAL_MODEL_DOWNLOAD",
+            "music_ai_allow_vocal_model_download",
+        ),
+    )
 
     @property
     def allow_encoder_download(self) -> bool:
@@ -57,7 +76,7 @@ class Settings(BaseSettings):
         return self.music_ai_allow_encoder_download
 
     def ensure_workspace(self) -> Path:
-        """Create workspace subdirectories used by Phase 0–5."""
+        """Create workspace subdirectories used by Phase 0–7."""
         root = self.workspace_dir
         for sub in (
             "projects",
@@ -76,6 +95,10 @@ class Settings(BaseSettings):
             "taste/features",
             "taste/style_vectors",
             "recipes",
+            "research",
+            "research/action_effect",
+            "research/action_effect/outcomes",
+            "research/eval",
         ):
             (root / sub).mkdir(parents=True, exist_ok=True)
         return root

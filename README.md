@@ -1,13 +1,14 @@
 # Private AI Music Producer
 
-Local-first AI music production assistant. **Spec v1.1** — constraint-first briefs, role-locks, musical diffs, candidate packaging, **reference → stems → MIDI** pipeline, reference-conditioned loops, **eval-driven critic → typed PatchOps**, **personal taste ranking**, **full-length multi-section instrumentals**. CIR/MIDI is the system of record; neural audio dual-path is allowed later without delaying models for product reasons.
+Local-first AI music production assistant. **Spec v1.1** — constraint-first briefs, role-locks, musical diffs, candidate packaging, **reference → stems → MIDI** pipeline, reference-conditioned loops, **eval-driven critic → typed PatchOps**, **personal taste ranking**, **full-length multi-section instrumentals**, **Phase 7 research stubs** (specialist MIDI hooks, action-effect outcomes, mix heuristics, vocal/multi-DAW stubs, blind-eval harness). CIR/MIDI is the system of record; neural audio dual-path is allowed without abandoning CIR.
 
-> Phase 0–6 (simulation / MIDI manual-import / render fixtures / taste sim encoder / full-length arrange). No live FL Studio claimed on Linux CI.  
-> Default stems + transcription + taste encoder are **simulated/stub** — no large model downloads.  
+> Phase 0–7 (simulation / MIDI manual-import / render fixtures / taste sim encoder / full-length arrange / research stubs). No live FL Studio claimed on Linux CI.  
+> Default stems + transcription + taste encoder + MIDI specialist are **simulated/stub** — no large model downloads.  
 > Phase 3 can use fixture `ReferenceProfile` adapters or real Phase 2 profiles.  
 > Phase 4 critic uses CIR simulation + optional render fixtures (`--fixture`).  
 > Phase 5 ranking head trains on frozen sim embeds; activates only if holdout beats retrieval.  
-> Phase 6 `full-compose` → multi-section instrumental + MIDI + versioned CIR; FL Playlist steps are manual.
+> Phase 6 `full-compose` → multi-section instrumental + MIDI + versioned CIR; FL Playlist steps are manual.  
+> Phase 7 research = interfaces + honest stubs + eval harnesses — **no** foundation downloads / train-from-scratch.
 
 ## Requirements
 
@@ -130,30 +131,47 @@ music-ai versions <project-id>
 Outputs: `workspace/midi/<id>/`, `workspace/projects/<id>/{arrangement_plan,manual_fl_steps,metadata,versions}/`.  
 Import into FL: [docs/setup-macos-fl-studio.md](docs/setup-macos-fl-studio.md#phase-6-full-length-import).
 
+### Phase 7 demo (research stubs)
+
+```bash
+music-ai research-status
+music-ai list-daws
+music-ai research-eval "mellow Afrobeats 110 BPM" --seed 42
+# after compose + revise-loop --apply:
+music-ai action-effect-log
+music-ai mix-heuristics <project-id>
+music-ai vocal-stub <project-id> --lyric "na na" --apply
+```
+
+No foundation models are downloaded. Optional neural MIDI / vocal paths refuse without
+`MUSIC_AI_ALLOW_SPECIALIST_DOWNLOAD` / `MUSIC_AI_ALLOW_VOCAL_MODEL_DOWNLOAD` — see
+[docs/audio-models.md](docs/audio-models.md#phase-7-research).
+
 ### Tests
 
 ```bash
 pytest
 pytest tests/unit/test_taste_*.py tests/integration/test_phase5_taste.py
 pytest tests/unit/test_structure_and_arrangement.py tests/integration/test_phase6_full_length.py
+pytest tests/unit/test_phase7_research.py tests/integration/test_phase7_research.py
 ```
 
 ## What's implemented
 
-**Real (sim):** Reference import (hash + rights + immutable store), numpy BPM/key/groove estimates, simulation stem separator, stub transcription → editable MIDI, ReferenceProfile, stem→role (+ lock), borrow chips (canonical `BorrowTrait` + aliases), BriefDocument, genre templates, **full-song structure templates + arrangement**, conditioned generators, role-locks, MusicalDiff, multi-candidate packaging, A/B MIDI proxies, recipe apply with locked CIR MIDI replay, FakeDaw / midi_export, **eval-driven critic → typed PatchOps**, CIR PatchOp applicator, bounded revision loop with measured improvement + rollback (fixture overlays drop once CIR healthy), render fixtures, taste ranking + registry, **`full-compose`**, CLI.
+**Real (sim):** Reference import (hash + rights + immutable store), numpy BPM/key/groove estimates, simulation stem separator, stub transcription → editable MIDI, ReferenceProfile, stem→role (+ lock), borrow chips (canonical `BorrowTrait` + aliases), BriefDocument, genre templates, **full-song structure templates + arrangement**, conditioned generators, role-locks, MusicalDiff, multi-candidate packaging, A/B MIDI proxies, recipe apply with locked CIR MIDI replay, FakeDaw / midi_export / **multi-DAW registry**, **eval-driven critic → typed PatchOps**, CIR PatchOp applicator, bounded revision loop with measured improvement + rollback (fixture overlays drop once CIR healthy), render fixtures, taste ranking + registry, **`full-compose`**, Phase 7 research hooks (specialist MIDI, action-effect outcomes, mix heuristics, vocal guide MIDI, dual-path policy, blind-eval harness), CLI.
 
-**Real (UI):** FastAPI local API + Vite React/TS frontend (`frontend/`) — brief canvas, role-locks, compose/revise/full-compose, ref pipeline demo, A/B + musical diff, version timeline, jobs history, settings/doctor stubs.
+**Real (UI):** FastAPI local API + Vite React/TS frontend (`frontend/`) — brief canvas, role-locks, compose/revise/full-compose, ref pipeline demo, A/B + musical diff, version timeline, jobs history (cancel stub), MIDI audition stub (path list), settings/doctor stubs.
 
-**Stubbed / pending:** Demucs / Basic Pitch (optional adapters, no auto-download), embeddings, listening journal UI, audition-in-context / live loop strip, full DAW approval drawer polish, live PostFader, neural audio models, Phase 7 research.
+**Stubbed / pending:** Demucs / Basic Pitch / neural MIDI specialist / neural vocal (optional adapters, no auto-download), embeddings, listening journal UI, audition-in-context / live loop strip, full DAW approval drawer polish, live PostFader / Ableton / Logic / Reaper, trained action-effect model, real blind listening studies.
 
 ## Docs
 
 - [Architecture](docs/architecture.md)
-- [Audio models (optional Demucs / Basic Pitch)](docs/audio-models.md)
+- [Audio models (optional Demucs / Basic Pitch / Phase 7)](docs/audio-models.md)
 - [Tool capabilities](docs/tool-capabilities.md)
 - [macOS + FL Studio setup](docs/setup-macos-fl-studio.md)
 - [Evaluation / critic](docs/evaluation.md)
-- [PHASE_0_REPORT.md](PHASE_0_REPORT.md) · [PHASE_1_REPORT.md](PHASE_1_REPORT.md) · [PHASE_2_REPORT.md](PHASE_2_REPORT.md) · [PHASE_3_REPORT.md](PHASE_3_REPORT.md) · [PHASE_4_REPORT.md](PHASE_4_REPORT.md) · [PHASE_5_REPORT.md](PHASE_5_REPORT.md) · [PHASE_6_REPORT.md](PHASE_6_REPORT.md)
+- [PHASE_0_REPORT.md](PHASE_0_REPORT.md) · [PHASE_1_REPORT.md](PHASE_1_REPORT.md) · [PHASE_2_REPORT.md](PHASE_2_REPORT.md) · [PHASE_3_REPORT.md](PHASE_3_REPORT.md) · [PHASE_4_REPORT.md](PHASE_4_REPORT.md) · [PHASE_5_REPORT.md](PHASE_5_REPORT.md) · [PHASE_6_REPORT.md](PHASE_6_REPORT.md) · [PHASE_7_REPORT.md](PHASE_7_REPORT.md)
 - [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md)
 
 ## Config

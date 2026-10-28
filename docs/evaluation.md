@@ -57,3 +57,18 @@ CLI: `music-ai taste-simulate`, `taste-train`, `taste-eval`, `taste-registry`, `
 Calibration: reliability bins on holdout `P(B>A)`. Do **not** promise >70% pairwise accuracy.
 
 Encoder: default `SimulationFrozenEncoder` (CIR feature projection). Optional pretrained audio encoder refuses without `MUSIC_AI_ALLOW_ENCODER_DOWNLOAD=true`.
+
+## Phase 7 research eval
+
+```
+research-eval → Phase 6 deterministic baseline vs Phase 7 specialist-hook path
+  → technical/musical + advanced mix proxies
+  → preference_proxy (simulation only)
+  → BlindListeningHarness scaffold for real human A/B later
+```
+
+CLI: `music-ai research-eval`, `research-status`, `action-effect-log`, `mix-heuristics`.
+
+**Exit honesty:** CI `preference_proxy` does **not** claim a blind listening win. Schedule real sessions via `BlindListeningHarness` when bounce/MIDI proxies are ready. Default specialist == deterministic generators → expected **tie**.
+
+Action-effect: revision loop appends `RevisionOutcome` rows; `HeuristicActionEffectPredictor` averages historical deltas by `action_type` — not a trained world model.

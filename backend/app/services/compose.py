@@ -14,6 +14,7 @@ from backend.app.core.logging import log_event, setup_logging
 from backend.app.daw.base import DawAdapter, DawResult
 from backend.app.daw.fake import FakeDawAdapter
 from backend.app.daw.midi_fallback import MidiExportAdapter
+from backend.app.daw.registry import adapter_for_settings
 from backend.app.models.db import init_db
 from backend.app.models.schemas import (
     BriefDocument,
@@ -28,8 +29,8 @@ from backend.app.models.schemas import (
 )
 from backend.app.music.brief import parse_brief
 from backend.app.music.diff import baseline_diff_summary
-from backend.app.music.generators import generate_from_brief
 from backend.app.music.midi import assert_eight_bars_span, export_project_midi
+from backend.app.research.midi_specialist import MidiSpecialistRequest, get_midi_specialist
 from backend.app.storage.assets import AssetStore
 from backend.app.storage.repository import ProjectRepository
 
@@ -49,9 +50,9 @@ class ComposeResult:
 
 
 def select_adapter(settings: Settings, assets: AssetStore) -> DawAdapter:
-    if settings.daw_mode == DawMode.MIDI_EXPORT:
-        return MidiExportAdapter(assets)
-    return FakeDawAdapter()
+    """Resolve DAW adapter; `assets` kept for call-site back-compat."""
+    del assets
+    return adapter_for_settings(settings)
 
 
 def compose_from_brief(
@@ -68,7 +69,12 @@ def compose_from_brief(
     repo = ProjectRepository(session_factory)
     assets = AssetStore(settings)
 
-    project = generate_from_brief(brief, name=name)
+    # Phase 7: specialist MIDI hook (default = deterministic generators).
+    specialist = get_midi_specialist(settings)
+    specialist_result = specialist.compose(
+        MidiSpecialistRequest(brief=brief, name=name)
+    )
+    project = specialist_result.project
     project.brief_id = brief.id
     project.recipe_id = brief.recipe_id
     brief.project_id = project.id
