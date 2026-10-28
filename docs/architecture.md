@@ -53,7 +53,7 @@ Pydantic models in `backend/app/models/schemas.py` (schema_version **0.3.0**): `
 2. **N seeds** → CIR + MIDI + `CandidatePackage` each
 3. **A/B** → MIDI proxies (or audio when present) + musical diff + optional preference
 4. **Revise** → role-locks (`keep drums, replace bass`) → version + diff
-5. **Recipe apply** → seed brief + locks → N candidates sharing locked material
+5. **Recipe apply** → seed brief + locks + **replay locked MIDI from recipe CIR** → N candidates sharing that locked material
 
 ## Phase 4 flow
 
@@ -110,8 +110,8 @@ Project status machine: `CREATED → PLANNED → ANALYSING → COMPOSING → APP
 - **Phase 0–1:** capability docs + brief → 8-bar MIDI + locks/diff ← *done*
 - **Phase 2:** reference → stems (limitations) + editable MIDI + tempo/groove + role mapping ← *done (simulation)*
 - **Phase 3:** reference → novel 8–16 bar MIDI, A/B, keep-drums replace-bass ← *done (simulation)*
-- **Phase 4:** critic typed PatchOps + bounded loop + measured/confirmable improvement + rollback ← *this slice*
-- Later: taste, full arrangement (see `IMPLEMENTATION_STATUS.md`)
+- **Phase 4:** critic typed PatchOps + bounded loop + measured/confirmable improvement + rollback ← *done (simulation)*
+- Later: taste (Phase 5), full arrangement (Phase 6) — see `IMPLEMENTATION_STATUS.md`
 
 ## Config
 

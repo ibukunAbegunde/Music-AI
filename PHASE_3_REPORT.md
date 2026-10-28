@@ -26,7 +26,7 @@ Borrow-trait aliases (`chord_feel`→`chords`, `groove_swing`→`groove`, `energ
 |------|--------|
 | Borrow-trait conditioning (`bass_bounce`, `percussion_texture`, …) | Real knobs → generators |
 | N candidates with explicit seeds | Real (`generate_candidates`) |
-| Recipe apply seeds brief + locks | Real; locked roles identical across candidates |
+| Recipe apply seeds brief + locks + CIR locked MIDI | Real; locked track events replayed from `cir_snapshot_ref` |
 | A/B path (MIDI proxies + PreferenceComparison) | Real; audio path ready when `Render.audio_path` exists |
 | Musical diff in A/B + revise | Real CIR diff |
 | Version timeline + restore helper | Real |
@@ -42,7 +42,7 @@ Borrow-trait aliases (`chord_feel`→`chords`, `groove_swing`→`groove`, `energ
 | Loudness-normalized WAV bounce | `loudness_notes` + `midi_proxy` status |
 | Neural audio dual-path | Allowed by v1.1; not installed |
 | React brief / A-B UI | CLI surfaces |
-| Critic PatchOps | Still heuristic stubs (Phase 4) |
+| Critic PatchOps | ✅ Phase 4 on `main` (eval-driven typed PatchOps) |
 
 ## Demo
 

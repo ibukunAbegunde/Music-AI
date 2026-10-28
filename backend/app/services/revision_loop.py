@@ -36,6 +36,17 @@ from backend.app.storage.assets import AssetStore
 from backend.app.storage.repository import ProjectRepository
 
 
+def _proposal_fixture_id(
+    cir_board: Scoreboard | None, fixture_id: str | None
+) -> str | None:
+    """Drop fixture overlay once CIR fails are clear (avoid sticky proposals)."""
+    if fixture_id is None or cir_board is None:
+        return fixture_id
+    if not cir_board.any_fail and cir_board.technical >= 0.85 and cir_board.musical >= 0.85:
+        return None
+    return fixture_id
+
+
 @dataclass
 class RevisionIteration:
     index: int
@@ -179,13 +190,19 @@ def run_revision_loop(
         snapshot_ref = snap.observations.get("snapshot_ref")
 
     # Scoreboard always from CIR simulation so PatchOps can show measured deltas.
-    # Optional fixture overlays drive *proposal* heuristics only (still typed ops).
+    # Optional fixture overlays drive *proposal* heuristics only (still typed ops),
+    # and are dropped once CIR fails clear (no sticky fixture proposals).
     initial_bundle = evaluate_project(current)
     persist_evaluation(initial_bundle, assets)
     initial_board = initial_bundle.scoreboard
     assert initial_board is not None
+    active_fixture = _proposal_fixture_id(initial_board, fixture_id)
+    # Suggest-only path keeps the requested fixture so demos still surface it.
+    suggest_fixture = fixture_id if not apply_ops else active_fixture
     proposal_bundle = (
-        evaluate_project(current, fixture_id=fixture_id) if fixture_id else initial_bundle
+        evaluate_project(current, fixture_id=suggest_fixture)
+        if suggest_fixture
+        else initial_bundle
     )
 
     # Suggest-only / collaborative without apply: return critic moves, no writes
@@ -200,7 +217,7 @@ def run_revision_loop(
     )
 
     critic = critique_project(
-        current, fixture_id=fixture_id, bundle=proposal_bundle, max_moves=3
+        current, fixture_id=suggest_fixture, bundle=proposal_bundle, max_moves=3
     )
 
     if needs_confirm and not apply_ops:
@@ -239,14 +256,17 @@ def run_revision_loop(
 
     for i in range(max_iterations):
         score_bundle = evaluate_project(current)
-        propose_bundle = (
-            evaluate_project(current, fixture_id=fixture_id) if fixture_id else score_bundle
-        )
-        critic = critique_project(
-            current, fixture_id=fixture_id, bundle=propose_bundle, max_moves=3
-        )
         before = score_bundle.scoreboard
         assert before is not None
+        iter_fixture = _proposal_fixture_id(before, fixture_id)
+        propose_bundle = (
+            evaluate_project(current, fixture_id=iter_fixture)
+            if iter_fixture
+            else score_bundle
+        )
+        critic = critique_project(
+            current, fixture_id=iter_fixture, bundle=propose_bundle, max_moves=3
+        )
 
         ops = list(critic.next_moves)
         if approved_set:
@@ -381,11 +401,14 @@ def run_revision_loop(
 
     final_bundle = evaluate_project(current)
     final_board = final_bundle.scoreboard
+    final_fixture = _proposal_fixture_id(final_board, fixture_id)
     final_propose = (
-        evaluate_project(current, fixture_id=fixture_id) if fixture_id else final_bundle
+        evaluate_project(current, fixture_id=final_fixture)
+        if final_fixture
+        else final_bundle
     )
     final_critic = critique_project(
-        current, fixture_id=fixture_id, bundle=final_propose, max_moves=3
+        current, fixture_id=final_fixture, bundle=final_propose, max_moves=3
     )
 
     version = None
@@ -450,6 +473,8 @@ def run_revision_loop(
                 "final_scoreboard": final_board.model_dump(mode="json") if final_board else None,
                 "undo_verified": undo_verified,
                 "fixture_id": fixture_id,
+                "proposal_fixture_id": final_fixture,
+                "proposal_source": "fixture" if final_fixture else "cir",
             },
             "candidate": candidate.model_dump(mode="json") if candidate else None,
             "next_moves": [o.model_dump(mode="json") for o in final_critic.next_moves],
@@ -481,6 +506,8 @@ def run_revision_loop(
                 "final_scoreboard": final_board.model_dump(mode="json") if final_board else None,
                 "undo_verified": undo_verified,
                 "fixture_id": fixture_id,
+                "proposal_fixture_id": final_fixture,
+                "proposal_source": "fixture" if final_fixture else "cir",
             },
             "next_moves": [o.model_dump(mode="json") for o in final_critic.next_moves],
             "snapshot_ref": snapshot_ref,

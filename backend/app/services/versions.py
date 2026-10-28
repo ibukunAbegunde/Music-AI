@@ -48,7 +48,7 @@ def list_version_timeline(
                 assets.root
                 / "projects"
                 / str(project_id)
-                / "diff_{}.json".format(v.id)
+                / f"diff_{v.id}.json"
             )
             if diff_path.exists():
                 md = MusicalDiff.model_validate(json.loads(diff_path.read_text(encoding="utf-8")))

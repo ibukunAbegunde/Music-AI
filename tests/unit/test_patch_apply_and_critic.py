@@ -80,3 +80,26 @@ def test_locked_role_rejected_by_applicator() -> None:
     )
     _, applied = apply_patch_ops(p, [op])
     assert applied[0].verification_status == "rejected"
+
+
+def test_regenerate_role_prefers_genre_template_id() -> None:
+    """Patch regen must not fall back to revise brief-text when genre_template_id is set."""
+    from backend.app.models.schemas import DawOperation
+    from backend.app.music.patch_apply import apply_patch_ops
+
+    p = generate_eight_bar_project("trap 140 BPM in C minor", seed=7)
+    assert p.genre_template_id == "trap"
+    # Simulate revise overwriting generation_brief with instruction that has no genre word
+    p.generation_brief = "keep the drums, replace bass"
+    op = DawOperation(
+        action_type="regenerate_role",
+        target_role="bass",
+        parameters={"variation": "softer"},
+        idempotency_key="regen-bass",
+    )
+    patched, applied = apply_patch_ops(p, [op], seed=21)
+    assert applied[0].verification_status == "applied"
+    assert patched.genre_template_id == "trap"
+    # Regenerated bass should still look trap-ish (generator uses genre_template_id)
+    bass = next(t for t in patched.tracks if t.role.value == "bass")
+    assert bass.note_events

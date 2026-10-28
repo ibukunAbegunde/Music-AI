@@ -21,7 +21,6 @@ from backend.app.models.db import init_db
 from backend.app.models.schemas import (
     STEM_TYPE_TO_ROLE,
     BorrowChip,
-    BorrowTrait,
     BriefDocument,
     LicenseClass,
     MusicTrack,
@@ -34,6 +33,7 @@ from backend.app.models.schemas import (
     UseMode,
     new_id,
 )
+from backend.app.music.borrow import normalize_borrow_trait
 from backend.app.music.brief import parse_brief
 from backend.app.music.midi import track_to_midifile
 from backend.app.storage.assets import AssetStore
@@ -322,18 +322,24 @@ def bind_borrow_chips(
 ) -> BriefDocument:
     """Attach borrow chips for selected reference traits onto a brief.
 
-    Also backfills ``reference_id`` on existing NL-parsed chips that match
-    the selected traits but were created without a reference binding.
+    Traits are normalized onto the canonical ``BorrowTrait`` set (Phase 2/3
+    aliases like ``groove_swing`` → ``groove``). Also backfills
+    ``reference_id`` on existing NL-parsed chips that match the selected
+    traits but were created without a reference binding.
     """
-    trait_set = set(traits)
+    normalized = [normalize_borrow_trait(t) for t in traits]
+    trait_set = set(normalized)
     chips: list[BorrowChip] = []
     seen: set[str] = set()
     for chip in brief.borrow_chips:
+        chip_trait = normalize_borrow_trait(chip.trait)
+        if chip_trait != chip.trait:
+            chip = chip.model_copy(update={"trait": chip_trait})
         if chip.trait in trait_set and chip.reference_id is None:
             chip = chip.model_copy(update={"reference_id": reference_id})
         chips.append(chip)
         seen.add(chip.trait)
-    for trait in traits:
+    for trait in normalized:
         if trait in seen:
             # Ensure bound copy exists even if NL chip already present
             if not any(c.trait == trait and c.reference_id == reference_id for c in chips):
@@ -388,7 +394,7 @@ def run_pipeline(
     if profile is None:
         profile = load_profile(asset.id, settings)
 
-    asset, bass_stem, notes, midi_path = run_transcribe(
+    asset, _bass_stem, notes, midi_path = run_transcribe(
         asset.id,
         stem_type="bass",
         settings=settings,

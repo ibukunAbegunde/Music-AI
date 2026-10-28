@@ -82,7 +82,7 @@ pytest
 
 ## What's implemented
 
-**Real (sim):** Reference import (hash + rights + immutable store), numpy BPM/key/groove estimates, simulation stem separator, stub transcription → editable MIDI, ReferenceProfile, stem→role (+ lock), borrow chips (`BorrowTrait`), BriefDocument, genre templates, conditioned generators, role-locks, MusicalDiff, multi-candidate packaging, A/B MIDI proxies, recipe apply, FakeDaw / midi_export, **eval-driven critic → typed PatchOps**, CIR PatchOp applicator, bounded revision loop with measured improvement + rollback, render fixtures, CLI.
+**Real (sim):** Reference import (hash + rights + immutable store), numpy BPM/key/groove estimates, simulation stem separator, stub transcription → editable MIDI, ReferenceProfile, stem→role (+ lock), borrow chips (canonical `BorrowTrait` + aliases), BriefDocument, genre templates, conditioned generators, role-locks, MusicalDiff, multi-candidate packaging, A/B MIDI proxies, recipe apply with locked CIR MIDI replay, FakeDaw / midi_export, **eval-driven critic → typed PatchOps**, CIR PatchOp applicator, bounded revision loop with measured improvement + rollback (fixture overlays drop once CIR healthy), render fixtures, CLI.
 
 **Stubbed / pending:** Demucs / Basic Pitch (optional adapters, no auto-download), embeddings, listening journal UI, audition-in-context, React UI, live PostFader, neural audio models.
 

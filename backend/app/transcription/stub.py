@@ -10,7 +10,7 @@ from pathlib import Path
 
 import numpy as np
 
-from backend.app.models.schemas import NoteEvent, MusicTrack, TrackRole
+from backend.app.models.schemas import MusicTrack, NoteEvent, TrackRole
 from backend.app.music.midi import track_to_midifile
 from backend.app.transcription.base import TranscriptionResult
 
@@ -146,8 +146,8 @@ class StubTranscriber:
             limitations=[
                 "Stub heuristic transcription — not Basic Pitch.",
                 "Best treated as an editable MIDI candidate; correct by ear.",
-                "Enable Basic Pitch later: pip install -e '.[basic-pitch]' "
-                "then --transcriber basic_pitch (see docs/audio-models.md).",
+                ("Enable Basic Pitch later: pip install -e '.[basic-pitch]' "
+                "then --transcriber basic_pitch (see docs/audio-models.md)."),
             ],
             midi_path=midi_path,
             confidence_mean=round(mean_conf, 3) if mean_conf is not None else None,

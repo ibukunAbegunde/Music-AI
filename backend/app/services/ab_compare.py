@@ -26,7 +26,6 @@ from backend.app.models.schemas import (
 from backend.app.music.diff import diff_projects
 from backend.app.storage.assets import AssetStore
 
-
 Choice = Literal["a", "b", "tie", "skip"]
 
 

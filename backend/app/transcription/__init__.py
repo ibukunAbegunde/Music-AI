@@ -1,6 +1,6 @@
 """Audio → MIDI transcription adapters (Phase 2)."""
 
-from backend.app.transcription.base import TranscriptionResult, Transcriber
+from backend.app.transcription.base import Transcriber, TranscriptionResult
 from backend.app.transcription.stub import StubTranscriber
 
 
@@ -15,4 +15,4 @@ def get_transcriber(name: str | None = None) -> Transcriber:
     raise ValueError(f"unknown transcriber {name!r}; use 'stub' or 'basic_pitch'")
 
 
-__all__ = ["TranscriptionResult", "Transcriber", "StubTranscriber", "get_transcriber"]
+__all__ = ["StubTranscriber", "Transcriber", "TranscriptionResult", "get_transcriber"]

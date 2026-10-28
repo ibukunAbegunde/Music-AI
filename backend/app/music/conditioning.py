@@ -15,6 +15,7 @@ from backend.app.models.schemas import (
     EnergyPoint,
     ReferenceProfile,
 )
+from backend.app.music.borrow import TRAIT_ALIASES, normalize_borrow_trait
 
 
 @dataclass
@@ -57,37 +58,55 @@ class ConditioningPlan:
         }
 
 
-# Synonym groups: Phase 2 BorrowTrait + legacy Phase 3 / NL aliases.
+# Synonym groups for conditioning knobs (canonical BorrowTrait + related traits).
+# Aliases themselves are normalized via ``normalize_borrow_trait`` before lookup.
 _TRAIT_GROUPS: dict[str, frozenset[str]] = {
-    "bass_bounce": frozenset({"bass_bounce", "bass_rhythm", "bass", "bass_feel"}),
-    "drums": frozenset({"drums", "percussion_texture", "groove", "groove_swing", "percussion", "perc"}),
-    "atmosphere": frozenset({"atmosphere", "pads", "space", "pad"}),
-    "chords": frozenset({"chords", "chord_feel", "harmony", "rhodes", "keys"}),
-    "energy": frozenset({"energy", "energy_curve", "arrangement"}),
+    "bass_bounce": frozenset({"bass_bounce", "bass_rhythm"}),
+    "drums": frozenset({"drums", "percussion_texture", "groove"}),
+    "atmosphere": frozenset({"atmosphere"}),
+    "chords": frozenset({"chords"}),
+    "energy": frozenset({"energy", "arrangement"}),
 }
 
 
+def _expand(canonical: str) -> frozenset[str]:
+    """Canonical + group siblings + any alias that maps onto them."""
+    base = set(_TRAIT_GROUPS.get(canonical, frozenset({canonical})))
+    base.add(canonical)
+    for alias, target in TRAIT_ALIASES.items():
+        if target in base or target == canonical:
+            base.add(alias)
+            base.add(target)
+    return frozenset(base)
+
+
 def _chip_weight(chips: list[BorrowChip], *traits: str) -> float:
-    names = set()
+    names: set[str] = set()
     for t in traits:
-        names |= _TRAIT_GROUPS.get(t, frozenset({t}))
-        names.add(t)
-    return max((c.weight for c in chips if c.trait in names), default=0.0)
+        names |= _expand(t)
+        names.add(normalize_borrow_trait(t))
+    return max(
+        (c.weight for c in chips if normalize_borrow_trait(c.trait) in names or c.trait in names),
+        default=0.0,
+    )
 
 
 def _has_trait(traits: list[str], *canonical: str) -> bool:
     names: set[str] = set()
     for t in canonical:
-        names |= _TRAIT_GROUPS.get(t, frozenset({t}))
-        names.add(t)
-    return any(t in names for t in traits)
+        names |= _expand(t)
+        names.add(normalize_borrow_trait(t))
+    return any(normalize_borrow_trait(t) in names or t in names for t in traits)
 
 
 def build_conditioning_plan(
     brief: BriefDocument,
     profile: ReferenceProfile | None = None,
 ) -> ConditioningPlan:
-    chips = list(brief.borrow_chips)
+    chips = [
+        c if c.trait == normalize_borrow_trait(c.trait) else c.model_copy(update={"trait": normalize_borrow_trait(c.trait)})
+        for c in brief.borrow_chips
+    ]
     traits = [c.trait for c in chips]
     plan = ConditioningPlan(traits=traits, novelty=brief.novelty, profile_id=str(profile.id) if profile else None)
 

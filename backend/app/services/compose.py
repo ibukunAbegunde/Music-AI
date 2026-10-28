@@ -147,7 +147,8 @@ def compose_from_brief(
         next_moves = critique_project(project, max_moves=3).next_moves or propose_next_moves(
             project
         )
-    except Exception:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001 — never block compose on critic failures
+        log_event(logger, "compose.critic_fallback", error=str(exc))
         next_moves = propose_next_moves(project)
     meta = {
         "project_id": str(project.id),
