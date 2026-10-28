@@ -1,4 +1,4 @@
-"""CLI entrypoint: music-ai compose / revise / reference pipeline / doctor."""
+"""CLI entrypoint: music-ai compose / revise / ref-compose / reference pipeline / ab / …"""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ from backend.app.services.revise import revise_project
 from backend.app.storage.assets import AssetStore
 
 app = typer.Typer(
-    help="Private AI Music Producer — Phase 2 CLI (references + brief + MIDI)",
+    help="Private AI Music Producer — Phase 2–3 CLI (references + conditioned MIDI)",
     no_args_is_help=True,
 )
 console = Console()
@@ -62,17 +62,35 @@ def _print_moves(moves) -> None:
         )
 
 
+def _print_candidate_table(candidates) -> None:
+    table = Table(title="Candidates")
+    table.add_column("#")
+    table.add_column("Seed")
+    table.add_column("Version")
+    table.add_column("One-line diff")
+    for c in candidates:
+        table.add_row(
+            str(c.index),
+            str(c.seed),
+            str(c.version.id),
+            c.candidate.one_line_diff[:80],
+        )
+    console.print(table)
+
+
 @app.command()
 def compose(
     prompt: str = typer.Argument(..., help="Creative brief / NL request"),
     seed: int | None = typer.Option(None, help="Explicit RNG seed"),
-    bars: int = typer.Option(8, help="Loop length in bars"),
+    bars: int = typer.Option(8, help="Loop length in bars (8–16)"),
     mode: str | None = typer.Option(None, help="simulation | midi_export"),
     workspace: Path | None = typer.Option(None, help="Override workspace directory"),
     lock: list[str] | None = typer.Option(None, help="Roles to lock (repeatable)"),
     recipe_id: str | None = typer.Option(None, help="Attach existing recipe UUID metadata"),
 ) -> None:
-    """NL/brief → 8-bar drum/bass/chord MIDI + candidate package."""
+    """NL/brief → 8–16-bar drum/bass/chord MIDI + candidate package."""
+    if bars < 8 or bars > 16:
+        raise typer.BadParameter("bars must be 8–16")
     settings = _settings(mode, workspace)
     setup_logging(settings.log_level)
     result = compose_from_prompt(
@@ -87,7 +105,8 @@ def compose(
     console.print(f"[bold green]Project[/] {result.project.id}")
     console.print(f"  brief: {result.brief.title} ({result.brief.genre_template_id})")
     console.print(
-        f"  seed: {result.project.seed}  bpm: {result.project.bpm}  key: {result.project.key_estimate}"
+        f"  seed: {result.project.seed}  bpm: {result.project.bpm}  "
+        f"key: {result.project.key_estimate}  bars: {result.project.length_bars}"
     )
     console.print(f"  locks: {result.brief.locked_roles or '—'}")
     console.print(f"  candidate: {result.candidate.id}")
@@ -123,6 +142,124 @@ def compose(
     _print_moves(result.next_moves)
 
 
+@app.command("ref-compose")
+def ref_compose(
+    prompt: str = typer.Argument(..., help="Creative brief (novelty encouraged)"),
+    trait: list[str] | None = typer.Option(
+        None,
+        help="Borrow traits (repeatable): bass_bounce, percussion_texture, …",
+    ),
+    fixture: str = typer.Option("afrobeats", help="Fixture genre profile until Phase 2"),
+    n: int = typer.Option(2, help="Number of candidates (seeds)"),
+    seed: int | None = typer.Option(None, help="Base seed (candidates use seed..seed+n-1)"),
+    bars: int = typer.Option(8, help="Loop length 8–16"),
+    mode: str | None = typer.Option(None),
+    workspace: Path | None = typer.Option(None),
+) -> None:
+    """Reference (fixture profile) → borrow chips → N novel CandidatePackages."""
+    if bars < 8 or bars > 16:
+        raise typer.BadParameter("bars must be 8–16")
+    from backend.app.services.reference_compose import compose_from_reference
+
+    settings = _settings(mode, workspace)
+    setup_logging(settings.log_level)
+    result = compose_from_reference(
+        prompt,
+        traits=trait,
+        fixture_genre=fixture,
+        n=n,
+        seed=seed,
+        bars=bars,
+        settings=settings,
+        adapter=_adapter(settings),
+    )
+    project_id = result.multi.baseline.project.id
+    console.print(f"[bold green]Project[/] {project_id}")
+    console.print(f"  analyzer: {result.analyzer}")
+    console.print(f"  profile: {result.profile.id} bpm≈{result.profile.bpm_estimate}")
+    console.print(f"  borrow traits: {result.traits}")
+    console.print(f"  conditioning: {result.multi.conditioning.get('notes')}")
+    console.print(f"  session: {result.multi.session_id}")
+    console.print(f"[yellow]Phase 2 note:[/] {result.phase2_note}")
+    _print_candidate_table(result.multi.candidates)
+    tip = result.multi.candidates[-1]
+    console.print(f"  tip version: {tip.version.id}")
+    console.print(f"  MIDI tip: {tip.midi_paths.get('combined')}")
+
+
+@app.command()
+def candidates(
+    prompt: str = typer.Argument(..., help="Brief text"),
+    n: int = typer.Option(3, help="Candidate count"),
+    seed: int | None = typer.Option(None),
+    bars: int = typer.Option(8),
+    mode: str | None = typer.Option(None),
+    workspace: Path | None = typer.Option(None),
+    fixture: str | None = typer.Option(None, help="Optional fixture profile to condition on"),
+    trait: list[str] | None = typer.Option(None),
+) -> None:
+    """Generate N seeded candidates (optionally reference-conditioned)."""
+    from backend.app.audio.reference import bind_borrow_chips, load_fixture_profile
+    from backend.app.services.candidates import generate_candidates
+
+    if bars < 8 or bars > 16:
+        raise typer.BadParameter("bars must be 8–16")
+    settings = _settings(mode, workspace)
+    setup_logging(settings.log_level)
+    brief = parse_brief(prompt, seed=seed, bars=bars)
+    profile = None
+    if fixture:
+        profile = load_fixture_profile(fixture)
+        if trait:
+            brief.borrow_chips.extend(bind_borrow_chips(profile, list(trait)))
+    multi = generate_candidates(
+        brief,
+        n=n,
+        base_seed=seed,
+        settings=settings,
+        adapter=_adapter(settings),
+        profile=profile,
+    )
+    console.print(f"[bold green]Project[/] {multi.baseline.project.id}")
+    console.print(f"  session: {multi.session_id}")
+    _print_candidate_table(multi.candidates)
+
+
+@app.command("ab")
+def ab_cmd(
+    project_id: str = typer.Argument(...),
+    index_a: int = typer.Option(0, help="Candidate index A"),
+    index_b: int = typer.Option(1, help="Candidate index B"),
+    choice: str | None = typer.Option(None, help="a|b|tie|skip"),
+    reason: str | None = typer.Option(None),
+    workspace: Path | None = typer.Option(None),
+) -> None:
+    """A/B two candidates (MIDI preview proxies when no render)."""
+    from backend.app.services.ab_compare import compare_session_pair
+
+    settings = _settings(None, workspace)
+    result = compare_session_pair(
+        UUID(project_id),
+        index_a=index_a,
+        index_b=index_b,
+        choice=choice,  # type: ignore[arg-type]
+        reason=reason,
+        settings=settings,
+    )
+    console.print(f"[bold green]A/B[/] mode={result.path_mode} id={result.comparison_id}")
+    console.print(f"  A seed={result.side_a.seed} midi={result.side_a.midi_proxy_path}")
+    console.print(f"  B seed={result.side_b.seed} midi={result.side_b.midi_proxy_path}")
+    console.print(f"  musical diff: {result.musical_diff.one_line_summary}")
+    console.print(f"  roles changed: {result.musical_diff.roles_changed}")
+    console.print(
+        f"  loudness target: {result.side_a.loudness_notes.target_lufs} LUFS "
+        f"({result.side_a.loudness_notes.normalization_status})"
+    )
+    if result.preference:
+        console.print(f"  preference: {result.preference.user_choice}")
+    console.print(f"  saved: {result.session_path}")
+
+
 @app.command()
 def brief(
     prompt: str = typer.Argument(..., help="Text to parse into BriefDocument JSON"),
@@ -139,7 +276,7 @@ def revise(
     project_id: str = typer.Argument(..., help="Existing project UUID"),
     instruction: str = typer.Argument(
         ...,
-        help="e.g. 'keep the drums, soften bass and add a fill before bar 8'",
+        help="e.g. 'keep the drums, replace bass' or 'soften bass and add a fill'",
     ),
     seed: int | None = typer.Option(None),
     mode: str | None = typer.Option(None, help="simulation | midi_export"),
@@ -167,6 +304,34 @@ def revise(
     _print_moves(result.next_moves)
 
 
+@app.command()
+def versions(
+    project_id: str = typer.Argument(...),
+    workspace: Path | None = typer.Option(None),
+) -> None:
+    """Show version timeline + one-line musical diffs."""
+    from backend.app.services.versions import list_version_timeline
+
+    settings = _settings(None, workspace)
+    entries = list_version_timeline(UUID(project_id), settings=settings)
+    if not entries:
+        console.print("No versions.")
+        return
+    table = Table(title=f"Versions — {project_id}")
+    table.add_column("Version")
+    table.add_column("Parent")
+    table.add_column("Seed")
+    table.add_column("Diff")
+    for e in entries:
+        table.add_row(
+            str(e.version_id),
+            str(e.parent_version_id or "—"),
+            str(e.seed if e.seed is not None else "—"),
+            (e.one_line_diff or "")[:72],
+        )
+    console.print(table)
+
+
 @app.command("templates")
 def templates_cmd() -> None:
     """List genre structure templates."""
@@ -186,7 +351,7 @@ def recipe_save(
     name: str | None = typer.Option(None, help="Recipe display name"),
     workspace: Path | None = typer.Option(None),
 ) -> None:
-    """Save a recipe stub (groove fingerprint + locks) from a project CIR tip."""
+    """Save a recipe (groove fingerprint + locks) from a project CIR tip."""
     from backend.app.music.recipes import recipe_from_project, save_recipe
     from backend.app.services.revise import _load_cir
 
@@ -205,7 +370,7 @@ def recipe_save(
 
 @app.command("recipe-list")
 def recipe_list(workspace: Path | None = typer.Option(None)) -> None:
-    """List saved recipe stubs."""
+    """List saved recipes."""
     from backend.app.music.recipes import list_recipes
 
     settings = _settings(None, workspace)
@@ -433,6 +598,36 @@ def ref_pipeline(
         f"  groove summary: swing≈{gf.swing_estimate} sync≈{gf.syncopation} "
         f"onsets={len(gf.onset_grid)}"
     )
+@app.command("recipe-apply")
+def recipe_apply(
+    recipe_id: str = typer.Argument(...),
+    prompt: str | None = typer.Option(None, help="Override brief text"),
+    n: int = typer.Option(2),
+    seed: int | None = typer.Option(None),
+    bars: int | None = typer.Option(None),
+    mode: str | None = typer.Option(None),
+    workspace: Path | None = typer.Option(None),
+) -> None:
+    """Apply a recipe → seed brief + locks → N candidates."""
+    from backend.app.music.recipes import apply_recipe
+
+    settings = _settings(mode, workspace)
+    setup_logging(settings.log_level)
+    assets = AssetStore(settings)
+    multi = apply_recipe(
+        UUID(recipe_id),
+        assets,
+        prompt=prompt,
+        seed=seed,
+        bars=bars,
+        n=n,
+        settings=settings,
+        adapter=_adapter(settings),
+    )
+    console.print(f"[bold green]Recipe applied → project[/] {multi.baseline.project.id}")
+    console.print(f"  recipe_id: {multi.recipe_id}")
+    console.print(f"  locks on brief: {multi.brief.locked_roles}")
+    _print_candidate_table(multi.candidates)
 
 
 @app.command()

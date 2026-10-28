@@ -1,4 +1,4 @@
-"""Deterministic drum / bass / chord generators (Phase 1)."""
+"""Deterministic drum / bass / chord generators (Phase 1+3 conditioning)."""
 
 from __future__ import annotations
 
@@ -19,6 +19,7 @@ from backend.app.models.schemas import (
 )
 from backend.app.music.brief import parse_brief
 from backend.app.music.coedit import apply_role_locks
+from backend.app.music.conditioning import ConditioningPlan
 from backend.app.music.templates import get_template
 from backend.app.music.theory import PROGRESSIONS, beats_per_bar, parse_key, scale_pitch, triad
 
@@ -36,10 +37,26 @@ def _humanize(rng: Random, base: float, amount: float = 0.02) -> float:
     return max(0.0, base + rng.uniform(-amount, amount))
 
 
-def generate_drums(brief: BriefDocument, rng: Random, bars: int, bpb: int) -> MusicTrack:
+def _swing_offset(swing: float, sub: float) -> float:
+    """Push off-beat 8ths later when swing > 0 (abstract groove borrow)."""
+    if swing <= 0 or abs(sub - 0.5) > 0.01:
+        return 0.0
+    return min(0.12, swing * 0.25)
+
+
+def generate_drums(
+    brief: BriefDocument,
+    rng: Random,
+    bars: int,
+    bpb: int,
+    plan: ConditioningPlan | None = None,
+) -> MusicTrack:
     tmpl = get_template(brief.genre_template_id or "default")
     genre = tmpl.id
     density = tmpl.groove_density * (0.7 + 0.6 * brief.novelty)
+    if plan is not None:
+        density *= plan.drum_density_scale
+    swing = plan.swing if plan else 0.0
     events: list[DrumEvent] = []
     total = bars * bpb
     for beat in range(total):
@@ -58,15 +75,20 @@ def generate_drums(brief: BriefDocument, rng: Random, bars: int, bpb: int) -> Mu
                     onset_beats=_humanize(rng, float(beat), 0.01),
                     velocity=int(90 + 30 * energy),
                     duration_beats=0.25,
+                    microtiming_ms=swing * 10.0,
                 )
             )
-        if genre in ("afrobeats", "amapiano") and bar_pos in (1, 2) and rng.random() < 0.45 + 0.2 * density:
+        kick_prob = 0.45 + 0.2 * density
+        if plan and plan.syncopation > 0.5:
+            kick_prob += 0.1
+        if genre in ("afrobeats", "amapiano") and bar_pos in (1, 2) and rng.random() < kick_prob:
             events.append(
                 DrumEvent(
                     instrument_role="kick",
-                    onset_beats=_humanize(rng, beat + 0.5, 0.015),
+                    onset_beats=_humanize(rng, beat + 0.5 + _swing_offset(swing, 0.5), 0.015),
                     velocity=rng.randint(70, 95),
                     duration_beats=0.2,
+                    microtiming_ms=swing * 12.0,
                 )
             )
         if bar_pos in (1, 3):
@@ -79,9 +101,9 @@ def generate_drums(brief: BriefDocument, rng: Random, bars: int, bpb: int) -> Mu
                     duration_beats=0.25,
                 )
             )
-        # Hats — denser with novelty / trap
+        # Hats — denser with novelty / trap / percussion borrow
         subs = [0.0, 0.5]
-        if genre in ("trap", "drill") or brief.novelty > 0.6:
+        if genre in ("trap", "drill") or brief.novelty > 0.6 or (plan and plan.drum_density_scale > 1.15):
             subs = [0.0, 0.25, 0.5, 0.75]
         for sub in subs:
             if rng.random() > density and sub not in (0.0, 0.5):
@@ -89,12 +111,19 @@ def generate_drums(brief: BriefDocument, rng: Random, bars: int, bpb: int) -> Mu
             events.append(
                 DrumEvent(
                     instrument_role="hat",
-                    onset_beats=_humanize(rng, beat + sub, 0.008),
+                    onset_beats=_humanize(
+                        rng, beat + sub + _swing_offset(swing, sub), 0.008
+                    ),
                     velocity=rng.randint(40, 90),
                     duration_beats=0.12,
+                    microtiming_ms=swing * 8.0 if abs(sub - 0.5) < 0.01 else 0.0,
                 )
             )
-        if genre == "amapiano" and bar_pos == 3 and rng.random() < 0.45:
+        perc_prob = 0.45
+        perc_traits = {"percussion_texture", "drums", "groove", "groove_swing"}
+        if plan and perc_traits.intersection(plan.traits):
+            perc_prob = 0.65
+        if (genre == "amapiano" or (plan and perc_traits.intersection(plan.traits))) and bar_pos == 3 and rng.random() < perc_prob:
             events.append(
                 DrumEvent(
                     instrument_role="perc",
@@ -125,19 +154,30 @@ def generate_drums(brief: BriefDocument, rng: Random, bars: int, bpb: int) -> Mu
         )
         for e in events
     ]
+    tags = [genre, "drums", "phase1"]
+    if plan and plan.traits:
+        tags.append("conditioned")
     return MusicTrack(
         role=TrackRole.DRUMS,
         drum_events=events,
         note_events=notes,
-        tags=[genre, "drums", "phase1"],
+        tags=tags,
     )
 
 
-def generate_bass(brief: BriefDocument, rng: Random, bars: int, bpb: int) -> MusicTrack:
+def generate_bass(
+    brief: BriefDocument,
+    rng: Random,
+    bars: int,
+    bpb: int,
+    plan: ConditioningPlan | None = None,
+) -> MusicTrack:
     tmpl = get_template(brief.genre_template_id or "default")
     root_pc, mode = parse_key(brief.key or "A minor")
     prog = PROGRESSIONS.get(tmpl.progression_key, PROGRESSIONS["default"])
     notes: list[NoteEvent] = []
+    offbeat = plan.bass_offbeat_bias if plan else 0.35
+    density = plan.bass_density if plan else 2.0
     for bar in range(bars):
         degree = prog[bar % len(prog)]
         root = scale_pitch(root_pc, degree, octave=2, mode=mode)
@@ -154,7 +194,11 @@ def generate_bass(brief: BriefDocument, rng: Random, bars: int, bpb: int) -> Mus
         )
         answer_deg = degree + (2 if rng.random() < 0.5 else 4)
         answer = scale_pitch(root_pc, answer_deg, octave=2, mode=mode)
-        off = 2.0 if tmpl.id not in ("afrobeats", "amapiano") else 1.5
+        # Offbeat bias from borrowed bass_bounce (still novel pitch choices via seed)
+        if tmpl.id in ("afrobeats", "amapiano") or offbeat > 0.4:
+            off = 1.5 if rng.random() < offbeat else 2.0
+        else:
+            off = 2.0
         notes.append(
             NoteEvent(
                 pitch=answer,
@@ -165,7 +209,8 @@ def generate_bass(brief: BriefDocument, rng: Random, bars: int, bpb: int) -> Mus
                 source="generator:bass",
             )
         )
-        if tmpl.id in ("afrobeats", "amapiano") or brief.novelty > 0.55:
+        extra = density >= 2.2 or tmpl.id in ("afrobeats", "amapiano") or brief.novelty > 0.55
+        if extra:
             notes.append(
                 NoteEvent(
                     pitch=root,
@@ -176,8 +221,19 @@ def generate_bass(brief: BriefDocument, rng: Random, bars: int, bpb: int) -> Mus
                     source="generator:bass",
                 )
             )
+        if density >= 2.8 and rng.random() < 0.55:
+            ghost = scale_pitch(root_pc, degree + 1, octave=2, mode=mode)
+            notes.append(
+                NoteEvent(
+                    pitch=ghost,
+                    onset_beats=onset + 0.75 + (0.25 if offbeat > 0.45 else 0.0),
+                    duration_beats=0.25,
+                    velocity=rng.randint(50, 70),
+                    channel=1,
+                    source="generator:bass",
+                )
+            )
         if tmpl.id in ("trap", "drill"):
-            # Longer 808 sustain on downbeat already; add ghost octave
             notes.append(
                 NoteEvent(
                     pitch=min(127, root + 12),
@@ -188,50 +244,74 @@ def generate_bass(brief: BriefDocument, rng: Random, bars: int, bpb: int) -> Mus
                     source="generator:bass",
                 )
             )
-    return MusicTrack(role=TrackRole.BASS, note_events=notes, tags=[tmpl.id, "bass", "phase1"])
+    tags = [tmpl.id, "bass", "phase1"]
+    if plan and {"bass_bounce", "bass_rhythm"}.intersection(plan.traits):
+        tags.append("conditioned")
+    return MusicTrack(role=TrackRole.BASS, note_events=notes, tags=tags)
 
 
-def generate_chords(brief: BriefDocument, rng: Random, bars: int, bpb: int) -> MusicTrack:
+def generate_chords(
+    brief: BriefDocument,
+    rng: Random,
+    bars: int,
+    bpb: int,
+    plan: ConditioningPlan | None = None,
+) -> MusicTrack:
     tmpl = get_template(brief.genre_template_id or "default")
     root_pc, mode = parse_key(brief.key or "A minor")
     prog = PROGRESSIONS.get(tmpl.progression_key, PROGRESSIONS["default"])
     notes: list[NoteEvent] = []
-    soft = brief.novelty < 0.45 or any(c.trait == "chord_feel" for c in brief.borrow_chips)
+    soft = (
+        brief.novelty < 0.45
+        or any(c.trait in {"chord_feel", "chords"} for c in brief.borrow_chips)
+        or (plan is not None and plan.soft_chords)
+    )
+    vel_scale = plan.chord_velocity_scale if plan else 1.0
     for bar in range(bars):
         degree = prog[bar % len(prog)]
         pitches = triad(root_pc, degree, octave=4, mode=mode)
-        # Optional 7th for higher novelty
         if brief.novelty > 0.55 and rng.random() < 0.5:
             pitches.append(scale_pitch(root_pc, degree + 6, octave=4, mode=mode))
         onset = float(bar * bpb)
         for i, pitch in enumerate(pitches):
+            base_lo, base_hi = (50, 75) if soft else (70, 95)
+            vel = int(rng.randint(base_lo, base_hi) * vel_scale)
             notes.append(
                 NoteEvent(
                     pitch=pitch,
                     onset_beats=onset + i * 0.02,
                     duration_beats=float(bpb) - 0.1,
-                    velocity=rng.randint(50, 75) if soft else rng.randint(70, 95),
+                    velocity=max(1, min(127, vel)),
                     channel=2,
                     articulation="sustain",
                     source="generator:chords",
                 )
             )
+    tags = [tmpl.id, "chords", "keys", "phase1"]
+    if plan and any(t in plan.traits for t in ("chord_feel", "chords", "atmosphere")):
+        tags.append("conditioned")
     return MusicTrack(
         role=TrackRole.CHORD,
         note_events=notes,
-        tags=[tmpl.id, "chords", "keys", "phase1"],
+        tags=tags,
     )
 
 
-def generate_from_brief(brief: BriefDocument, *, name: str | None = None) -> MusicProject:
+def generate_from_brief(
+    brief: BriefDocument,
+    *,
+    name: str | None = None,
+    plan: ConditioningPlan | None = None,
+    reference_ids: list | None = None,
+) -> MusicProject:
     bars = brief.length_bars
     seed = brief.seed if brief.seed is not None else 0
     rng = Random(seed)
     bpb = beats_per_bar(brief.meter)
 
-    drums = generate_drums(brief, rng, bars, bpb)
-    bass = generate_bass(brief, Random(seed + 1), bars, bpb)
-    chords = generate_chords(brief, Random(seed + 2), bars, bpb)
+    drums = generate_drums(brief, rng, bars, bpb, plan)
+    bass = generate_bass(brief, Random(seed + 1), bars, bpb, plan)
+    chords = generate_chords(brief, Random(seed + 2), bars, bpb, plan)
     tracks = [drums, bass, chords]
     section = Section(
         name="loop_a",
@@ -257,12 +337,15 @@ def generate_from_brief(brief: BriefDocument, *, name: str | None = None) -> Mus
         generation_brief=brief.free_text,
         genre_template_id=tmpl.id,
         brief_id=brief.id,
+        reference_ids=list(reference_ids or []),
         status=ProjectStatus.COMPOSING,
         seed=seed,
+        recipe_id=brief.recipe_id,
         autonomy_policy=AutonomyPolicy(
             mode=brief.autonomy_mode,
             scratch_or_release=brief.scratch_or_release,
         ),
+        schema_version="0.3.0",
         created_at=utcnow(),
         updated_at=utcnow(),
     )

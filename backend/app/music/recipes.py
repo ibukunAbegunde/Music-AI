@@ -94,3 +94,73 @@ def list_recipes(assets: AssetStore) -> list[Recipe]:
         if r is not None:
             out.append(r)
     return out
+
+
+def brief_from_recipe(
+    recipe: Recipe,
+    *,
+    prompt: str | None = None,
+    seed: int | None = None,
+    bars: int | None = None,
+    novelty: float | None = None,
+) -> "BriefDocument":
+    """Seed a BriefDocument from a saved recipe (locks + groove + skeleton)."""
+    from backend.app.models.schemas import BriefDocument, EnergyPoint, utcnow
+    from backend.app.music.brief import parse_brief
+
+    fp = recipe.groove_fingerprint or {}
+    text = prompt or recipe.brief_snapshot.get("generation_brief") or recipe.name
+    length = bars or int(fp.get("length_bars") or 8)
+    brief = parse_brief(
+        str(text),
+        seed=seed if seed is not None else recipe.brief_snapshot.get("seed"),
+        bars=length,
+        locked_roles=list(recipe.locked_roles),
+    )
+    if fp.get("bpm"):
+        brief.bpm = float(fp["bpm"])
+    if fp.get("key"):
+        brief.key = str(fp["key"])
+    if fp.get("meter"):
+        brief.meter = str(fp["meter"])
+    if recipe.arrangement_skeleton:
+        brief.section_map = list(recipe.arrangement_skeleton)
+    if novelty is not None:
+        brief.novelty = novelty
+    brief.recipe_id = recipe.id
+    brief.locked_roles = sorted(set(brief.locked_roles) | set(recipe.locked_roles))
+    if not brief.energy_curve:
+        brief.energy_curve = [
+            EnergyPoint(bar=i + 1, value=0.55) for i in range(brief.length_bars)
+        ]
+    brief.updated_at = utcnow()
+    return brief
+
+
+def apply_recipe(
+    recipe_id: UUID,
+    assets: AssetStore,
+    *,
+    prompt: str | None = None,
+    seed: int | None = None,
+    bars: int | None = None,
+    n: int = 2,
+    settings=None,
+    adapter=None,
+    profile=None,
+):
+    """Load recipe → brief → N candidates (Phase 3 recipe apply)."""
+    from backend.app.services.candidates import generate_candidates
+
+    recipe = load_recipe(recipe_id, assets)
+    if recipe is None:
+        raise ValueError(f"unknown recipe {recipe_id}")
+    brief = brief_from_recipe(recipe, prompt=prompt, seed=seed, bars=bars)
+    return generate_candidates(
+        brief,
+        n=n,
+        base_seed=seed if seed is not None else brief.seed,
+        settings=settings,
+        adapter=adapter,
+        profile=profile,
+    )
