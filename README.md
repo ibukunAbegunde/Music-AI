@@ -1,9 +1,10 @@
 # Private AI Music Producer
 
-Local-first AI music production assistant. **Spec v1.1** — constraint-first briefs, role-locks, musical diffs, candidate packaging, **reference → stems → MIDI** pipeline. CIR/MIDI is the system of record; neural audio dual-path is allowed later without delaying models for product reasons.
+Local-first AI music production assistant. **Spec v1.1** — constraint-first briefs, role-locks, musical diffs, candidate packaging, **reference → stems → MIDI** pipeline, reference-conditioned loops. CIR/MIDI is the system of record; neural audio dual-path is allowed later without delaying models for product reasons.
 
-> Phase 0–2 (simulation / MIDI manual-import). No live FL Studio claimed on Linux CI.  
-> Default stems + transcription are **simulated/stub** — no large model downloads.
+> Phase 0–3 (simulation / MIDI manual-import). No live FL Studio claimed on Linux CI.  
+> Default stems + transcription are **simulated/stub** — no large model downloads.  
+> Phase 3 can use fixture `ReferenceProfile` adapters or real Phase 2 profiles.
 
 ## Requirements
 
@@ -51,19 +52,32 @@ Outputs under `workspace/references/<id>/`, `workspace/stems/<id>/`, plus MIDI c
 
 Optional real models (manual, user-approved): [docs/audio-models.md](docs/audio-models.md).
 
+### Phase 3 demo (reference → candidates → A/B → revise)
+
+```bash
+music-ai ref-compose "original mellow Afrobeats with bass bounce" \
+  --trait bass_bounce --trait percussion_texture --seed 42 --n 2 --bars 8
+# paste project id:
+music-ai ab <project-id> --choice b --reason "prefer B bass"
+music-ai revise <project-id> "keep the drums, replace bass" --seed 99
+music-ai versions <project-id>
+music-ai recipe-save <project-id> --name "winner"
+music-ai recipe-apply <recipe-id> --n 2 --seed 11
+```
+
+Outputs under `workspace/midi/<id>/` and `workspace/projects/<id>/` (metadata, brief, CIR, candidates, A/B, diffs).
+
 ### Tests
 
 ```bash
 pytest
 ```
 
-## What's in Phase 2
+## What's implemented
 
-**Real:** Reference import (hash + rights + immutable store), numpy BPM/key/groove estimates, simulation stem separator, stub transcription → editable MIDI, ReferenceProfile, stem→role (+ lock), borrow chips on briefs, CLI pipeline.
+**Real (sim):** Reference import (hash + rights + immutable store), numpy BPM/key/groove estimates, simulation stem separator, stub transcription → editable MIDI, ReferenceProfile, stem→role (+ lock), borrow chips (`BorrowTrait`), BriefDocument, genre templates, conditioned generators, role-locks, MusicalDiff, multi-candidate packaging, A/B MIDI proxies, recipe apply, FakeDaw / midi_export, critic PatchOp stubs, CLI.
 
-**Simulated / stubbed:** Demucs (optional adapter, no auto-download), Basic Pitch (same), embeddings, live PostFader, full UI.
-
-**Still from Phase 1:** BriefDocument, genre templates, generators, role-locks, MusicalDiff, CandidatePackage, FakeDaw / midi_export, critic PatchOp stubs.
+**Stubbed / pending:** Demucs / Basic Pitch (optional adapters, no auto-download), embeddings, listening journal UI, audition-in-context, full PatchOp executor (Phase 4), React UI, live PostFader, neural audio models.
 
 ## Docs
 
@@ -71,7 +85,7 @@ pytest
 - [Audio models (optional Demucs / Basic Pitch)](docs/audio-models.md)
 - [Tool capabilities](docs/tool-capabilities.md)
 - [macOS + FL Studio setup](docs/setup-macos-fl-studio.md)
-- [PHASE_0_REPORT.md](PHASE_0_REPORT.md) · [PHASE_1_REPORT.md](PHASE_1_REPORT.md) · [PHASE_2_REPORT.md](PHASE_2_REPORT.md)
+- [PHASE_0_REPORT.md](PHASE_0_REPORT.md) · [PHASE_1_REPORT.md](PHASE_1_REPORT.md) · [PHASE_2_REPORT.md](PHASE_2_REPORT.md) · [PHASE_3_REPORT.md](PHASE_3_REPORT.md)
 - [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md)
 
 ## Config
@@ -85,4 +99,5 @@ Keep `ALLOW_CLOUD_AUDIO=false` unless you opt in.
 - No large model installs without approval.
 - Simulation success ≠ live FL control.
 - Separated stems / transcribed MIDI inherit reference rights — unknown ≠ cleared for release.
+- Fixture references ≠ cleared sampling rights for release.
 - `workspace/`, `.env`, and user audio are gitignored.

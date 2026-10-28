@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from uuid import UUID
@@ -128,8 +129,19 @@ def revise_project(
             tmpl = get_template(parent_genre)
             brief.title = f"{tmpl.name} revise"
 
+    lower_instr = instruction.lower()
+    # "replace/change bass" ⇒ keep drums (and chords unless asked), regen bass
+    replace_bass = bool(
+        re.search(r"\b(replace|change|new)\b.{0,24}\bbass\b", lower_instr)
+        or re.search(r"\bbass\b.{0,16}\b(replace|change)\b", lower_instr)
+    )
+    if replace_bass and "drums" not in locks:
+        locks = sorted(set(locks) | {"drums"})
+        parent_locked = apply_role_locks(parent, locks)
+        brief.locked_roles = locks
+
     regenerated = generate_from_brief(brief, name=parent.name + "-rev")
-    if "soften bass" in instruction.lower() or "softer bass" in instruction.lower():
+    if "soften bass" in lower_instr or "softer bass" in lower_instr:
         for t in regenerated.tracks:
             if t.role.value == "bass":
                 t.note_events = [
@@ -137,17 +149,19 @@ def revise_project(
                     for n in t.note_events
                 ]
 
-    if "humanize" in instruction.lower():
+    if "humanize" in lower_instr:
         regenerated = humanize_project(regenerated, seed=brief.seed or 0)
 
     merged = merge_preserving_locks(parent_locked, regenerated)
-    if "fill" in instruction.lower():
+    if "fill" in lower_instr:
         merged = add_end_fill(merged, before_bar=merged.length_bars)
     merged.id = parent.id
     merged.recipe_id = parent.recipe_id
     merged.brief_id = parent.brief_id
+    merged.reference_ids = list(parent.reference_ids)
     merged.generation_brief = instruction
     merged.genre_template_id = brief.genre_template_id or parent.genre_template_id
+    merged.schema_version = parent.schema_version or "0.3.0"
     merged.updated_at = utcnow()
     merged.status = ProjectStatus.APPLYING
 

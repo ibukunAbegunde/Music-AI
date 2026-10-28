@@ -119,7 +119,7 @@ def parse_brief(
         ("bass_bounce", ("bass bounce", "bass feel", "bassline")),
         ("percussion_texture", ("percussion", "perc", "hats", "drums bounce")),
         ("atmosphere", ("atmosphere", "pad", "space")),
-        ("chord_feel", ("chords", "rhodes", "keys", "harmony")),
+        ("chords", ("chords", "rhodes", "keys", "harmony")),
     ):
         if any(k in lower for k in keys):
             chips.append(BorrowChip(trait=trait, weight=0.8))
