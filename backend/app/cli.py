@@ -21,7 +21,7 @@ from backend.app.services.revise import revise_project
 from backend.app.storage.assets import AssetStore
 
 app = typer.Typer(
-    help="Private AI Music Producer — Phase 0–4 CLI (refs, conditioned MIDI, critic loop)",
+    help="Private AI Music Producer — Phase 0–5 CLI (refs, critic, personal taste)",
     no_args_is_help=True,
 )
 console = Console()
@@ -356,6 +356,7 @@ def templates_cmd() -> None:
 def recipe_save(
     project_id: str = typer.Argument(..., help="Project UUID to snapshot as a recipe"),
     name: str | None = typer.Option(None, help="Recipe display name"),
+    approved: bool = typer.Option(False, help="Mark approved (feeds Phase 5 style vectors)"),
     workspace: Path | None = typer.Option(None),
 ) -> None:
     """Save a recipe (groove fingerprint + locks) from a project CIR tip."""
@@ -367,10 +368,11 @@ def recipe_save(
     project = _load_cir(assets, UUID(project_id), None)
     if project is None:
         raise typer.BadParameter(f"no CIR found for project {project_id}")
-    recipe = recipe_from_project(project, name=name)
+    recipe = recipe_from_project(project, name=name, approved=approved)
     path = save_recipe(recipe, assets)
     console.print(f"[bold green]Recipe[/] {recipe.id}")
     console.print(f"  name: {recipe.name}")
+    console.print(f"  approved: {recipe.approved}")
     console.print(f"  locks: {recipe.locked_roles or '—'}")
     console.print(f"  path: {path}")
 
@@ -789,6 +791,235 @@ def probe_daw() -> None:
         "Use simulation or midi_export mode."
     )
     console.print_json(json.dumps(report, indent=2, default=str))
+
+
+# --- Phase 5: personal taste -------------------------------------------------
+
+
+@app.command("taste-simulate")
+def taste_simulate(
+    n_projects: int = typer.Option(8, help="Distinct projects for holdout splits"),
+    pairs: int = typer.Option(4, help="Pairs per project"),
+    seed: int = typer.Option(42),
+    workspace: Path | None = typer.Option(None),
+) -> None:
+    """Generate synthetic pairwise preferences (CI / demo; no listening required)."""
+    from backend.app.taste.simulate import build_simulated_dataset
+
+    settings = _settings(None, workspace)
+    settings.ensure_workspace()
+    pairs_out = build_simulated_dataset(
+        n_projects=n_projects,
+        pairs_per_project=pairs,
+        settings=settings,
+        seed=seed,
+        persist=True,
+    )
+    console.print(
+        f"[bold green]Simulated[/] {len(pairs_out)} pairwise comparisons "
+        f"across {n_projects} projects → workspace/taste/comparisons/"
+    )
+
+
+@app.command("taste-train")
+def taste_train(
+    version: str = typer.Option("0.1.0"),
+    seed: int = typer.Option(0),
+    epochs: int = typer.Option(250),
+    no_activate: bool = typer.Option(False, help="Register but never activate"),
+    workspace: Path | None = typer.Option(None),
+) -> None:
+    """Train frozen-encoder ranking head; activate only if holdout beats retrieval."""
+    from backend.app.taste.pipeline import train_and_evaluate
+
+    settings = _settings(None, workspace)
+    settings.ensure_workspace()
+    result = train_and_evaluate(
+        settings=settings,
+        version=version,
+        seed=seed,
+        epochs=epochs,
+        activate_if_better=not no_activate,
+    )
+    er = result.eval_report
+    console.print(f"[bold green]Checkpoint[/] {result.checkpoint.id} v={result.checkpoint.version}")
+    console.print(f"  encoder: {result.encoder_name}")
+    console.print(f"  decisive pairs: {result.n_decisive}")
+    console.print(
+        f"  holdout ranking acc={er.ranking['accuracy']:.3f} "
+        f"logloss={er.ranking['logloss']:.3f}"
+    )
+    console.print(
+        f"  retrieval baseline acc={er.retrieval['accuracy']:.3f} "
+        f"| random≈{er.random['accuracy']:.3f}"
+    )
+    console.print(
+        f"  better_than_retrieval={er.better_than_retrieval} "
+        f"activated={result.activated}"
+    )
+    console.print(f"  saved: {result.checkpoint_path}")
+    for n in result.notes:
+        console.print(f"  note: {n}")
+
+
+@app.command("taste-eval")
+def taste_eval(
+    seed: int = typer.Option(0),
+    workspace: Path | None = typer.Option(None),
+) -> None:
+    """Re-evaluate active (or latest) ranking head on project-held-out pairs."""
+    from backend.app.taste.encoder import get_frozen_encoder
+    from backend.app.taste.evaluation import evaluate_ranking
+    from backend.app.taste.pipeline import _load_pair_matrices
+    from backend.app.taste.ranking import PairwiseRankingHead
+    from backend.app.taste.registry import get_active_checkpoint, list_checkpoints
+    from backend.app.taste.retrieval import RetrievalBaseline
+
+    settings = _settings(None, workspace)
+    ckpt = get_active_checkpoint(settings=settings)
+    if ckpt is None:
+        ckpts = list_checkpoints(settings=settings)
+        if not ckpts:
+            raise typer.Exit("No taste checkpoints — run taste-simulate && taste-train")
+        ckpt = ckpts[-1]
+        console.print(f"[yellow]No active model — evaluating latest[/] {ckpt.id}")
+    encoder = get_frozen_encoder(settings)
+    emb_a, emb_b, labels, project_ids = _load_pair_matrices(settings, encoder)
+    head = PairwiseRankingHead.from_checkpoint(ckpt)
+    report = evaluate_ranking(
+        head, emb_a, emb_b, labels, project_ids, seed=seed, retrieval=RetrievalBaseline()
+    )
+    console.print_json(
+        json.dumps(
+            {
+                "checkpoint_id": str(ckpt.id),
+                "ranking": report.ranking,
+                "retrieval": report.retrieval,
+                "random": report.random,
+                "better_than_retrieval": report.better_than_retrieval,
+                "calibration_bins": report.calibration_bins,
+                "notes": report.notes,
+            },
+            indent=2,
+        )
+    )
+
+
+@app.command("taste-registry")
+def taste_registry(workspace: Path | None = typer.Option(None)) -> None:
+    """List taste model checkpoints and active marker."""
+    from backend.app.taste.registry import get_active_checkpoint, list_checkpoints
+
+    settings = _settings(None, workspace)
+    active = get_active_checkpoint(settings=settings)
+    table = Table(title="Taste model registry")
+    table.add_column("Active")
+    table.add_column("Version")
+    table.add_column("ID")
+    table.add_column("Holdout acc")
+    table.add_column("Better?")
+    for c in list_checkpoints(settings=settings):
+        acc = c.holdout_metrics.get("accuracy")
+        table.add_row(
+            "✓" if active and c.id == active.id else "",
+            c.version,
+            str(c.id),
+            f"{acc:.3f}" if isinstance(acc, float) else "—",
+            "yes" if c.better_than_baseline else "no",
+        )
+    console.print(table)
+
+
+@app.command("taste-rollback")
+def taste_rollback(workspace: Path | None = typer.Option(None)) -> None:
+    """Roll back to the previously active taste checkpoint."""
+    from backend.app.taste.registry import rollback_checkpoint
+
+    settings = _settings(None, workspace)
+    prev = rollback_checkpoint(settings=settings)
+    if prev is None:
+        console.print("[yellow]No previous checkpoint — registry cleared/inactive[/]")
+    else:
+        console.print(f"[bold green]Rolled back[/] → {prev.id} v={prev.version}")
+
+
+@app.command("taste-profile")
+def taste_profile(workspace: Path | None = typer.Option(None)) -> None:
+    """Show transparent taste profile (recorded data only)."""
+    from backend.app.taste.dataset import taste_profile_summary
+
+    settings = _settings(None, workspace)
+    summary = taste_profile_summary(settings=settings)
+    console.print_json(summary.model_dump_json(indent=2))
+
+
+@app.command("journal-add")
+def journal_add(
+    project_id: str = typer.Argument(...),
+    notes: str = typer.Argument(...),
+    rating: float | None = typer.Option(None, min=0, max=5),
+    version_id: str | None = typer.Option(None),
+    tag: list[str] | None = typer.Option(None),
+    workspace: Path | None = typer.Option(None),
+) -> None:
+    """Append a listening-journal entry tied to a project/version."""
+    from backend.app.models.schemas import ListeningJournalEntry
+    from backend.app.taste.dataset import record_journal_entry
+
+    settings = _settings(None, workspace)
+    entry = ListeningJournalEntry(
+        project_id=UUID(project_id),
+        version_id=UUID(version_id) if version_id else None,
+        notes=notes,
+        tags=list(tag or []),
+        rating=rating,
+    )
+    path = record_journal_entry(entry, settings=settings)
+    console.print(f"[bold green]Journal[/] {entry.id} → {path}")
+
+
+@app.command("journal-list")
+def journal_list(workspace: Path | None = typer.Option(None)) -> None:
+    """List listening-journal entries."""
+    from backend.app.taste.dataset import list_journal
+
+    settings = _settings(None, workspace)
+    entries = list_journal(settings=settings)
+    table = Table(title="Listening journal")
+    table.add_column("ID")
+    table.add_column("Project")
+    table.add_column("Rating")
+    table.add_column("Notes")
+    for e in entries:
+        table.add_row(
+            str(e.id)[:8],
+            str(e.project_id)[:8],
+            "" if e.rating is None else str(e.rating),
+            e.notes[:60],
+        )
+    console.print(table)
+
+
+@app.command("style-vectors")
+def style_vectors_cmd(
+    approved_only: bool = typer.Option(True),
+    workspace: Path | None = typer.Option(None),
+) -> None:
+    """Derive style vectors from approved recipes (no-op if none approved)."""
+    from backend.app.taste.style_vectors import derive_style_vectors, list_style_vectors
+
+    settings = _settings(None, workspace)
+    derived = derive_style_vectors(settings=settings, approved_only=approved_only)
+    all_v = list_style_vectors(settings=settings)
+    console.print(
+        f"[bold green]Style vectors[/] derived={len(derived)} total={len(all_v)} "
+        f"(approved_only={approved_only})"
+    )
+    if not derived and not all_v:
+        console.print(
+            "  [yellow]No approved recipes with CIR — save+approve a recipe first "
+            "(music-ai recipe-save …). Vectors are not invented.[/]"
+        )
 
 
 if __name__ == "__main__":

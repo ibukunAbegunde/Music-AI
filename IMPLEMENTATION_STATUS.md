@@ -2,7 +2,7 @@
 
 Last updated: 2026-10-28  
 Spec: **v1.1** (Agent Store)  
-Current phase: **Phase 4 — Critic + multi-iteration (simulation)**
+Current phase: **Phase 5 — Personal taste model (simulation)**
 
 ## Phase checklist
 
@@ -13,7 +13,7 @@ Current phase: **Phase 4 — Critic + multi-iteration (simulation)**
 | 2 | Audio reference pipeline | ✅ Implemented (simulation stems + stub transcription) |
 | 3 | Reference-conditioned compositions | ✅ Implemented (simulation; MIDI A/B proxies) |
 | 4 | Critic + multi-iteration | ✅ Implemented (simulation + fixtures; eval-driven PatchOps) |
-| 5 | Personal taste model | ❌ Not started |
+| 5 | Personal taste model | ✅ Implemented (simulation encoder + ranking head; no CLAP download) |
 | 6 | Autonomous full-length | ❌ Not started |
 | 7 | Research upgrades | ❌ Not started |
 
@@ -21,7 +21,7 @@ Current phase: **Phase 4 — Critic + multi-iteration (simulation)**
 
 | Module | Status | Verification |
 |--------|--------|----------------|
-| Domain schemas v0.3 (BorrowTrait, StemRoleMapping, Brief, Recipe, Candidate, MusicalDiff, PatchOp, …) | ✅ | mock-tested |
+| Domain schemas v0.3+ (BorrowTrait, StemRoleMapping, Brief, Recipe, Candidate, MusicalDiff, PatchOp, Taste*, …) | ✅ | mock-tested |
 | Genre templates library | ✅ | mock-tested |
 | NL → BriefDocument parser | ✅ | mock-tested |
 | Richer drum/bass/chord generators + conditioning | ✅ | mock-tested |
@@ -32,7 +32,7 @@ Current phase: **Phase 4 — Critic + multi-iteration (simulation)**
 | N-candidate exploration + seeds | ✅ | mock-tested |
 | Borrow-trait conditioning (canonical `BorrowTrait` + aliases) | ✅ | mock-tested |
 | `ReferenceAnalyzer` + FixtureReferenceAnalyzer | ✅ stub | mock-tested |
-| A/B compare (MIDI proxy / audio-ready) | ✅ | mock-tested |
+| A/B compare (MIDI proxy / audio-ready) → taste dataset | ✅ | mock-tested |
 | Recipe save/load/**apply** (locked CIR MIDI replay) | ✅ | mock-tested |
 | Version timeline + restore | ✅ | mock-tested |
 | FakeDaw verify/undo | ✅ | mock-tested |
@@ -49,11 +49,17 @@ Current phase: **Phase 4 — Critic + multi-iteration (simulation)**
 | Basic Pitch adapter | 🚧 optional stub (no auto-download) | refuses without install |
 | Borrow chips ↔ reference profile | ✅ | mock-tested |
 | Stem → role → role-lock | ✅ | mock-tested |
+| Pairwise taste dataset + listening journal | ✅ | mock-tested |
+| Retrieval preference baseline | ✅ | mock-tested |
+| Frozen-encoder ranking head (sim projection) | ✅ | mock-tested |
+| Optional pretrained audio encoder (CLAP/MERT) | 🚧 stub refuses | no download without flag |
+| Holdout-by-project eval + calibration | ✅ | mock-tested |
+| Taste model registry / rollback | ✅ | mock-tested |
+| Style vectors from approved recipes | ✅ | mock-tested |
 | AuditionRequest / sound match | 🚧 schema stub | — |
-| Listening journal | 🚧 schema only | — |
 | Full brief-canvas UI | ❌ | — |
 | Live PostFader / FL Studio | ❌ | blocked (N/A on Linux CI) |
-| Audio embeddings (CLAP/MERT) | ❌ | deferred |
+| Audio embeddings (CLAP/MERT) | 🚧 interface only | deferred (approval flag) |
 
 ## Known limitations
 
@@ -66,11 +72,12 @@ Current phase: **Phase 4 — Critic + multi-iteration (simulation)**
 - A/B uses MIDI preview proxies until bounce WAVs exist (`loudness_notes.normalization_status=midi_proxy`).
 - Neural audio dual-path documented; models not installed (awaiting approval).
 - MP3/FLAC/M4A decode requires ffmpeg on PATH.
-- Taste / preference ranking deferred to Phase 5.
+- Taste frozen encoder defaults to **simulation CIR projection** — not CLAP/MERT. Ranking head is real numpy logistic; deploy gated on beating retrieval holdout.
+- Style vectors require **approved** recipes with recoverable CIR; never invented.
 
 ## Next
 
-1. Wire live bounce metrics on Mac when PostFader probed.
-2. Wire real Phase 2 profiles into `ref-compose` (fixture analyzer remains available).
-3. Phase 5 pairwise taste collection.
-4. Optional Demucs / Basic Pitch only after explicit approval (see `docs/audio-models.md`).
+1. Phase 6 autonomous full-length (sections, Scratch vs Release, sound library audition).
+2. Wire live bounce metrics on Mac when PostFader probed.
+3. Optional Demucs / Basic Pitch / audio encoder only after explicit approval (see `docs/audio-models.md`).
+4. Collect real listening pairwise data to replace/augment `taste-simulate`.

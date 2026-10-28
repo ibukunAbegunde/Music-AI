@@ -199,6 +199,7 @@ def compare_candidates(
                 "task": "phase3_ab",
                 "path_mode": path_mode,
                 "musical_diff": musical_diff.one_line_summary,
+                "genre_template_id": cir_a.genre_template_id,
             },
             render_a_id=render_a.id,
             render_b_id=render_b.id,
@@ -207,6 +208,19 @@ def compare_candidates(
             tags=list(tags or []),
             timestamp=utcnow(),
             blind_status=False,
+            project_id=project_id,
+            version_a_id=version_a,
+            version_b_id=version_b,
+        )
+        # Phase 5: also append to taste dataset with CIR feature vectors
+        from backend.app.taste.dataset import append_comparison
+        from backend.app.taste.features import extract_cir_features
+
+        append_comparison(
+            preference,
+            settings=settings,
+            feature_a=extract_cir_features(cir_a).tolist(),
+            feature_b=extract_cir_features(cir_b).tolist(),
         )
 
     comparison_id = preference.id if preference else new_id()

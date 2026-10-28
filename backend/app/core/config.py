@@ -38,9 +38,12 @@ class Settings(BaseSettings):
     music_ai_separator: str = "simulation"
     music_ai_transcriber: str = "stub"
     prefer_librosa: bool = False
+    # Phase 5 taste — simulation encoder by default; optional requires explicit flag
+    taste_encoder: str = "simulation"  # simulation | optional
+    allow_encoder_download: bool = False
 
     def ensure_workspace(self) -> Path:
-        """Create workspace subdirectories used by Phase 0–2."""
+        """Create workspace subdirectories used by Phase 0–5."""
         root = self.workspace_dir
         for sub in (
             "projects",
@@ -52,6 +55,13 @@ class Settings(BaseSettings):
             "logs",
             "snapshots",
             "models",
+            "models/taste",
+            "taste",
+            "taste/comparisons",
+            "taste/journal",
+            "taste/features",
+            "taste/style_vectors",
+            "recipes",
         ):
             (root / sub).mkdir(parents=True, exist_ok=True)
         return root

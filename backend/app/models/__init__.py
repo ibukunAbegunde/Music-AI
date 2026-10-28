@@ -33,6 +33,9 @@ from backend.app.models.schemas import (
     Section,
     StemAsset,
     StemRoleMapping,
+    StyleVector,
+    TasteModelCheckpoint,
+    TasteProfileSummary,
     TrackRole,
     UseMode,
 )
@@ -70,6 +73,9 @@ __all__ = [
     "Section",
     "StemAsset",
     "StemRoleMapping",
+    "StyleVector",
+    "TasteModelCheckpoint",
+    "TasteProfileSummary",
     "TrackRole",
     "UseMode",
 ]
