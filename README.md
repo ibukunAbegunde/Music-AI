@@ -26,6 +26,22 @@ mkdir -p workspace
 pytest
 ```
 
+### Local UI (React + FastAPI)
+
+```bash
+# terminal 1 — API (wraps compose / revise / ref-pipeline / full-compose / jobs)
+source .venv/bin/activate
+music-ai-api
+# or: uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 8000
+
+# terminal 2 — Vite UI
+cd frontend && npm install && npm run dev
+```
+
+Open [http://localhost:5173](http://localhost:5173) (proxies `/api` → `:8000`).  
+Pages: Workspace (brief canvas + role-locks + versions), References, A/B candidates, Jobs, Settings.  
+Details: [frontend/README.md](frontend/README.md).
+
 ### Phase 1 demo (compose / revise)
 
 ```bash
@@ -126,7 +142,9 @@ pytest tests/unit/test_structure_and_arrangement.py tests/integration/test_phase
 
 **Real (sim):** Reference import (hash + rights + immutable store), numpy BPM/key/groove estimates, simulation stem separator, stub transcription → editable MIDI, ReferenceProfile, stem→role (+ lock), borrow chips (canonical `BorrowTrait` + aliases), BriefDocument, genre templates, **full-song structure templates + arrangement**, conditioned generators, role-locks, MusicalDiff, multi-candidate packaging, A/B MIDI proxies, recipe apply with locked CIR MIDI replay, FakeDaw / midi_export, **eval-driven critic → typed PatchOps**, CIR PatchOp applicator, bounded revision loop with measured improvement + rollback (fixture overlays drop once CIR healthy), render fixtures, taste ranking + registry, **`full-compose`**, CLI.
 
-**Stubbed / pending:** Demucs / Basic Pitch (optional adapters, no auto-download), embeddings, listening journal UI, audition-in-context, React UI / DAW approval drawer, live PostFader, neural audio models, Phase 7 research.
+**Real (UI):** FastAPI local API + Vite React/TS frontend (`frontend/`) — brief canvas, role-locks, compose/revise/full-compose, ref pipeline demo, A/B + musical diff, version timeline, jobs history, settings/doctor stubs.
+
+**Stubbed / pending:** Demucs / Basic Pitch (optional adapters, no auto-download), embeddings, listening journal UI, audition-in-context / live loop strip, full DAW approval drawer polish, live PostFader, neural audio models, Phase 7 research.
 
 ## Docs
 

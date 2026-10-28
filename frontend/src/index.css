@@ -1,0 +1,125 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: "Syne", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+
+  --color-ink: #1a2422;
+  --color-ink-muted: #5a6b66;
+  --color-paper: #f3f6f4;
+  --color-paper-2: #e7eee9;
+  --color-panel: #ffffffcc;
+  --color-line: #c5d2cb;
+  --color-accent: #0f766e;
+  --color-accent-2: #c45c26;
+  --color-ok: #2f7d4a;
+  --color-warn: #b45309;
+  --color-danger: #b42318;
+  --color-lock: #1d4ed8;
+}
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  html,
+  body,
+  #root {
+    min-height: 100%;
+  }
+
+  body {
+    margin: 0;
+    font-family: var(--font-sans);
+    color: var(--color-ink);
+    background:
+      radial-gradient(1200px 600px at 10% -10%, #d7ebe4 0%, transparent 55%),
+      radial-gradient(900px 500px at 100% 0%, #f0e6d8 0%, transparent 50%),
+      linear-gradient(180deg, #f7faf8 0%, #eef3f0 100%);
+    background-attachment: fixed;
+  }
+
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.035;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    z-index: 0;
+  }
+
+  #root {
+    position: relative;
+    z-index: 1;
+  }
+
+  h1,
+  h2,
+  h3,
+  .font-display {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--color-accent) 28%, white);
+  }
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse-soft {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--color-accent) 35%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 8px transparent;
+  }
+}
+
+@keyframes lock-pop {
+  0% {
+    transform: scale(0.85);
+  }
+  60% {
+    transform: scale(1.08);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.animate-fade-up {
+  animation: fade-up 0.45s ease-out both;
+}
+
+.animate-pulse-soft {
+  animation: pulse-soft 1.6s ease-in-out infinite;
+}
+
+.animate-lock-pop {
+  animation: lock-pop 0.28s ease-out;
+}
